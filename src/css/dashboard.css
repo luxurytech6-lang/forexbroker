@@ -1,0 +1,187 @@
+/* =============================================================================
+   dashboard.css — Dashboard page styles
+   Requires shared.css to be loaded first.
+   Do NOT redefine tokens, resets, or shared components here.
+   ============================================================================= */
+
+
+/* ── 1. Performance Chart ─────────────────────────────────────────────────── */
+
+.perf-headline {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: var(--fm);
+  margin-bottom: 3px;
+}
+
+.perf-subline {
+  font-size: 11px;
+  color: var(--nt);
+  margin-bottom: 14px;
+}
+
+.bars-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--nt);
+  font-family: var(--fm);
+}
+
+
+/* ── 2. Asset Allocation ──────────────────────────────────────────────────── */
+
+.alloc-row {
+  margin-bottom: 12px;
+}
+
+.alloc-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.alloc-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.alloc-total {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+
+/* ── 3. Card Helpers (dashboard-specific) ─────────────────────────────────── */
+
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.card-link {
+  font-size: 11px;
+  color: var(--g);
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.card-link:hover { opacity: .75; }
+
+
+/* ── 4. Copy Trading Summary ──────────────────────────────────────────────── */
+
+.copy-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.copy-summary-count {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.copy-summary-alloc {
+  font-size: 11px;
+  color: var(--nt);
+  margin-top: 2px;
+}
+
+.copy-traders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.copy-trader-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.copy-trader-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.copy-trader-pct {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+
+/* ── 5. Quick Actions ─────────────────────────────────────────────────────── */
+
+.quick-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.quick-action-btn {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 11px 14px;
+}
+
+
+/* ── 6. Marketplace Teaser ────────────────────────────────────────────────── */
+
+.marketplace-preview-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--t);
+  border: 1px solid var(--br);
+  border-radius: 10px;
+  transition: border-color .15s;
+}
+.mp-preview-card:hover { border-color: var(--g); }
+
+.mp-preview-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
+  color: #000;
+}
+
+.mp-preview-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mp-preview-tag {
+  font-size: 10px;
+  color: var(--nt);
+  margin-top: 2px;
+}
+
+.mp-preview-roi {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mp-preview-price {
+  font-size: 10px;
+  color: var(--nt);
+  margin-top: 2px;
+}

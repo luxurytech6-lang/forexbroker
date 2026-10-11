@@ -1,0 +1,265 @@
+/* copy-trading.css — Styles specific to the Copy Trading page only.
+   Requires shared.css to be loaded first. */
+
+/* ── App Nav (shared with dashboard) ────────────────────────────────────── */
+.nav-portfolio-label {
+  font-family: var(--fm);
+  font-size: 11px;
+  color: var(--nt);
+}
+
+.nav-icon {
+  font-size: 17px;
+  color: var(--nt);
+  cursor: pointer;
+}
+
+.nav-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+
+/* ── Tab Bar ─────────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--n2);
+  border: 1px solid var(--nb);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.tab-btn {
+  font-family: var(--ff);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--nt);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: var(--np);
+  background: var(--n3);
+}
+
+.tab-btn.active {
+  background: var(--g);
+  color: var(--n0);
+}
+
+
+/* ── Controls Row (tabs + filters) ──────────────────────────────────────── */
+.ct-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.ct-filter-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ct-filter-row .form-select {
+  width: auto;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+
+/* ── Trader Card ─────────────────────────────────────────────────────────── */
+.ct-trader-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.ct-badge-row {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+
+/* ── Copying Card ────────────────────────────────────────────────────────── */
+.ct-copying-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.ct-copying-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 12px !important;
+  flex-shrink: 0;
+}
+
+.ct-copying-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ct-copying-handle {
+  font-size: 11px;
+  color: var(--nt);
+}
+
+.ct-copying-badge {
+  margin-left: auto;
+}
+
+.ct-copying-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ct-stat-cell {
+  background: var(--n3);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.ct-stat-value {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ct-stat-label {
+  font-size: 10px;
+  color: var(--nt);
+}
+
+.ct-copying-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ct-action-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.ct-stop-btn {
+  color: var(--rd);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.ct-stop-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--rd);
+}
+
+
+/* ── Leaderboard Table ───────────────────────────────────────────────────── */
+.ct-rank {
+  font-weight: 700;
+  color: var(--nt);
+}
+
+.ct-trader-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ct-table-avatar {
+  width: 28px !important;
+  height: 28px !important;
+  font-size: 10px !important;
+  flex-shrink: 0;
+}
+
+.ct-table-name {
+  font-weight: 600;
+}
+
+.ct-table-handle {
+  font-size: 11px;
+  color: var(--nt);
+}
+
+.ct-roi {
+  font-weight: 700;
+}
+
+
+/* ── Copy Modal ──────────────────────────────────────────────────────────── */
+.ct-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.ct-modal-avatar {
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 14px !important;
+  flex-shrink: 0;
+}
+
+.ct-modal-sub {
+  margin: 0;
+}
+
+.ct-modal-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.ct-modal-stat-cell {
+  text-align: center;
+  padding: 10px;
+  background: var(--n3);
+  border-radius: 7px;
+}
+
+.ct-modal-stat-value {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.ct-modal-stat-label {
+  font-size: 10px;
+  color: var(--nt);
+  margin-top: 3px;
+}
+
+.ct-modal-notice {
+  background: rgba(201, 168, 76, 0.07);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  border-radius: 7px;
+  padding: 10px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: var(--nt);
+}
+
+.ct-notice-icon {
+  color: var(--g);
+  font-size: 13px;
+  vertical-align: -2px;
+  margin-right: 5px;
+}
+
+.ct-modal-cta {
+  padding: 12px;
+  font-size: 14px;
+}

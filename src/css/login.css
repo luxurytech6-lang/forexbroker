@@ -1,0 +1,156 @@
+/* LOGIN / AUTH SPECIFIC STYLES */
+.auth-wrap {
+  min-height: calc(100vh - 58px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background: var(--n0);
+}
+
+.auth-box {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.auth-logo {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  color: var(--np);
+  text-decoration: none;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+
+.auth-logo em {
+  color: var(--g);
+  font-style: normal;
+}
+
+.auth-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.auth-sub {
+  font-size: 14px;
+  color: var(--nt);
+}
+
+.pw-wrap {
+  position: relative;
+}
+
+.pw-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--nt);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+}
+
+.remember-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 24px;
+  font-size: 13px;
+}
+
+.remember-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--nt);
+  cursor: pointer;
+}
+
+.forgot {
+  color: var(--g);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.forgot:hover {
+  text-decoration: underline;
+}
+
+.divider-or {
+  text-align: center;
+  margin: 24px 0;
+  position: relative;
+  color: var(--nt);
+  font-size: 13px;
+}
+
+.divider-or::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--nb);
+}
+
+.divider-or span {
+  background: var(--n2);
+  padding: 0 16px;
+  position: relative;
+}
+
+.social-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.twofa-box {
+  margin-top: 28px;
+  padding: 18px 20px;
+  background: var(--n2);
+  border: 1px solid var(--nb);
+  border-radius: 10px;
+}
+
+.twofa-label {
+  font-size: 11px;
+  color: var(--nt);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.twofa-row {
+  display: flex;
+  gap: 10px;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 13px;
+  color: var(--nt);
+}
+
+.auth-footer a {
+  color: var(--g);
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}
