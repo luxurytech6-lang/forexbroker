@@ -422,7 +422,7 @@ export function useAction() {
 const PILL_KIND = {
   ok:   ['active','approved','completed','complete','paid','delivered','verified','resolved','closed','success','open_ok','live','yes'],
   warn: ['pending','processing','awaiting','review','in_progress','in progress','shipped','open','waiting'],
-  bad:  ['rejected','declined','failed','cancelled','canceled','blocked','refunded','expired','suspended','no'],
+  bad:  ['rejected','declined','failed','cancelled','canceled','blocked','refunded','expired','suspended','locked','no'],
   info: ['frozen','exited','funded','draft','paused'],
 };
 export function Pill({ status, children }) {

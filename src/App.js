@@ -30,14 +30,22 @@ import Cards            from './dashboard/Cards';
 import Notifications    from './dashboard/notification';
 import Subscription     from './dashboard/subscription';
 import Mining           from './dashboard/mining';
+import VerifyIdentity   from './dashboard/VerifyIdentity';
 
 // Admin console
 import AdminLogin       from './admin/adminLogin';
 import AdminDashboard   from './admin/adminDashboard';
 
+// Live chat on every page except /admin
+import ChatwayWidget    from './componet/ChatwayWidget';
+// Suspended / locked account notices (the database enforces the rules)
+import AccountGuard     from './account/AccountGuard';
+
 function App() {
   return (
     <Router>
+      <ChatwayWidget />
+      <AccountGuard />
       <Routes>
         {/* Public */}
         <Route path="/"             element={<TradeFlowLanding />} />
@@ -71,6 +79,7 @@ function App() {
         <Route path="/cards"        element={<Cards />} />
         <Route path="/billing"      element={<Subscription />} />
         <Route path="/profile"      element={<Profile />} />
+        <Route path="/verify-identity" element={<VerifyIdentity />} />
         <Route path="/settings"     element={<Settings />} />
         <Route path="/notification" element={<Notifications />} />
 

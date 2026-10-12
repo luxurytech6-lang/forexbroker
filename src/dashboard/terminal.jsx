@@ -2064,6 +2064,7 @@ const ACCOUNT_LINKS = [
   { href:'/payments', icon:'ti-credit-card', label:'Payments' },
   { href:'/cards',    icon:'ti-cards',       label:'Cards' },
   { href:'/profile',  icon:'ti-user-circle', label:'Profile'  },
+  { href:'/verify-identity', icon:'ti-shield-check', label:'Verify identity' },
   { href:'/settings', icon:'ti-settings',    label:'Settings' },
   { href:'/support',  icon:'ti-headset',     label:'Support'  },
 ];
@@ -2599,6 +2600,7 @@ function MobileSettingsScreen({ session, onConnectClick, onDisconnect, userBalan
     : '??';
   const links = [
     { icon:'ti-user-circle', label:'Profile',  href:'/profile' },
+    { icon:'ti-shield-check', label:'Verify identity', href:'/verify-identity' },
     { icon:'ti-credit-card', label:'Payments', href:'/payments' },
     { icon:'ti-cards', label:'Cards', href:'/cards' },
     { icon:'ti-settings',    label:'Settings', href:'/settings' },

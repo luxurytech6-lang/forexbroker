@@ -5,7 +5,7 @@ import {
 import {
   LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers,
   Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
-  CreditCard as DkCard, UserCircle as DkUser, Settings as DkSettings, Headset as DkHeadset,
+  CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset,
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 import supabase from "../supabase";
@@ -24,6 +24,7 @@ import {
   getUserCurrency,
   fetchAllCryptoWalletAddresses,
 } from '../payment/paymentService';
+import { useAccountState, fetchAccountState, restrictionMessage } from '../account/accountState';
 
 /* ─── Design tokens (matches Insights / CopyTrading / Marketplace) ──────────── */
 const T = {
@@ -720,8 +721,14 @@ const TXN_DISPLAY = {
   plan_charge:{ Icon: Crown,             iconBg: 'rgba(167,139,250,.15)', iconCol: '#B49BFF', amountCol: '#FF6470', statusCls: 'purple', sign: '-' },
   fee:        { Icon: Receipt,           iconBg: 'rgba(100,116,139,.15)', iconCol: '#64748b', amountCol: '#FF6470', statusCls: 'muted',  sign: '-' },
   payout:     { Icon: Banknote,              iconBg: 'rgba(52,211,153,.15)',  iconCol: '#34d399', amountCol: '#34d399', statusCls: 'green',  sign: '+' },
+  // Purchases paid in crypto with a proof screenshot (pending until an admin confirms)
+  marketplace_purchase: { Icon: Gem,       iconBg: 'rgba(226,174,74,.15)',  iconCol: '#E2AE4A', amountCol: '#FF6470', statusCls: 'amber',  sign: '-' },
+  property_investment:  { Icon: Building2, iconBg: 'rgba(180,155,255,.15)', iconCol: '#B49BFF', amountCol: '#FF6470', statusCls: 'purple', sign: '-' },
+  mining_purchase:      { Icon: Zap,       iconBg: 'rgba(226,174,74,.15)',  iconCol: '#E2AE4A', amountCol: '#FF6470', statusCls: 'amber',  sign: '-' },
+  card_order:           { Icon: Wallet,    iconBg: 'rgba(91,140,255,.15)',  iconCol: '#5B8CFF', amountCol: '#FF6470', statusCls: 'blue',   sign: '-' },
+  copy_trading:         { Icon: Copy,      iconBg: 'rgba(54,194,180,.15)',  iconCol: '#36C2B4', amountCol: '#FF6470', statusCls: 'green',  sign: '-' },
 };
-const STATUS_CLS_MAP = { completed: 'green', pending: 'amber', failed: 'red', reversed: 'purple' };
+const STATUS_CLS_MAP = { completed: 'green', pending: 'amber', failed: 'red', rejected: 'red', reversed: 'purple' };
 
 function formatTxnDate(ts) {
   return new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' });
@@ -917,6 +924,7 @@ const DK_NAV = [
     { key:'payments',  href:'/payments',     Icon:DkCard,      label:'Payments' },
     { key:'cards',     href:'/cards',        Icon:DkCards,     label:'Cards' },
     { key:'profile',   href:'/profile',      Icon:DkUser,      label:'Profile' },
+    { key:'identity',  href:'/verify-identity', Icon:DkShield,  label:'Verify identity' },
     { key:'settings',  href:'/settings',     Icon:DkSettings,  label:'Settings' },
     { key:'support',   href:'/support',      Icon:DkHeadset,   label:'Support' },
   ]},
@@ -2326,18 +2334,72 @@ function DepositPanel({ user, profile, wallets, currency, onDepositComplete, cry
   );
 }
 
+/* ── Withdrawal sent: confirmation popup ── */
+const maskDest = (d) => {
+  if (!d) return '';
+  return d.split(' / ').map(part => (part.length > 10 ? `${part.slice(0, 6)}…${part.slice(-4)}` : part)).join(' / ');
+};
+function WithdrawSuccessModal({ receipt: r, email, onClose }) {
+  useEffect(() => {
+    const k = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', k);
+    return () => document.removeEventListener('keydown', k);
+  }, [onClose]);
+  const money = (n) => `${r.currency === 'USD' ? '$' : ''}${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${r.currency !== 'USD' ? ` ${r.currency}` : ''}`;
+  const row = (label, value, style) => (
+    <div className="py-sum-row"><span className="py-sum-row-label">{label}</span><span className="py-sum-row-val" style={style}>{value}</span></div>
+  );
+  return (
+    <div className="py-modal-overlay" onClick={onClose}>
+      <div className="py-modal" style={{ maxWidth: 440 }} role="dialog" aria-modal="true" aria-label="Withdrawal sent" onClick={e => e.stopPropagation()}>
+        <button className="py-modal-close" onClick={onClose} aria-label="Close"><X size={16} /></button>
+        <div className="py-modal-icon" style={{ background: 'rgba(52,211,153,.14)' }}>
+          <CheckCheck size={26} style={{ color: '#34D399' }} />
+        </div>
+        <div className="py-modal-title">Withdrawal <em style={{ color: '#34D399', fontStyle: 'italic' }}>sent</em></div>
+        <div className="py-modal-sub" style={{ marginBottom: 16 }}>
+          Your request was received and is being processed. You'll get <strong style={{ color: T.gr }}>{money(r.receive)}</strong> via {r.method}{r.eta ? ` (${r.eta})` : ''}.
+        </div>
+
+        <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '4px 14px', marginBottom: 14 }}>
+          {row('Amount', money(r.amount))}
+          {row('Fee', `−${money(r.fee)}`, { color: T.rd })}
+          {row("You'll receive", money(r.receive), { color: T.bl, fontWeight: 700 })}
+          {row('Method', r.method)}
+          {r.destination && row('To', <span style={{ fontFamily: T.mono }} title={r.destination}>{maskDest(r.destination)}</span>)}
+          {r.reference && row('Reference', <span style={{ fontFamily: T.mono }}>{r.reference}</span>)}
+          {row('Status', <span style={{ color: T.am }}>{r.status === 'pending' ? 'Pending review' : String(r.status).replace(/_/g, ' ')}</span>)}
+          {row('Date', r.date.toLocaleString())}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: T.nt, lineHeight: 1.5, marginBottom: 18 }}>
+          <Mail size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+          {r.emailed && email
+            ? <span>A confirmation email has been sent to <strong style={{ color: T.gr }}>{email}</strong>.</span>
+            : <span>You can follow this withdrawal under <strong style={{ color: T.gr }}>History</strong>.</span>}
+        </div>
+
+        <button className="in-btn in-btn-blue in-btn-lg in-btn-full" onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Withdraw Panel ── */
 function WithdrawPanel({ user, profile, wallets, onWithdrawComplete }) {
   const [amount, setAmount] = useState('');
   const [preset, setPreset] = useState(null);
   const [method, setMethod] = useState('bank');
   const [wallet, setWallet] = useState('USD');
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState(null);     // receipt shown in the confirmation popup
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [accountNum, setAccountNum] = useState('');
   const [routing, setRouting] = useState('');
   const [cryptoAddr, setCryptoAddr] = useState('');
+  // Admin controls: suspended / locked accounts or withdrawals can't withdraw
+  const { state: acct, reload: reloadAcct } = useAccountState();
+  const blocked = restrictionMessage(acct, { withdrawal: true });
 
   const numAmt = parseFloat(amount) || 0;
   const fee = (numAmt * 0.002).toFixed(2);
@@ -2359,6 +2421,10 @@ function WithdrawPanel({ user, profile, wallets, onWithdrawComplete }) {
       return;
     }
     if (!user) return;
+    // Check again right before submitting, in case an admin just changed it
+    const fresh = await fetchAccountState();
+    const stop = restrictionMessage(fresh, { withdrawal: true });
+    if (stop) { setError(stop); reloadAcct(); return; }
     if (selectedWallet && numAmt > selectedWallet.rawBalance) {
       setError('Amount exceeds wallet balance.');
       return;
@@ -2390,8 +2456,11 @@ function WithdrawPanel({ user, profile, wallets, onWithdrawComplete }) {
         destination: destination || null,
       });
 
-      // Send withdrawal email
-      await sendWithdrawalEmail({
+      // Send withdrawal email — the withdrawal is already recorded, so a mail
+      // problem must not hide the confirmation (or tempt the user to submit again)
+      let emailed = true;
+      try {
+        await sendWithdrawalEmail({
         email: profile.email,
         firstName: profile.first_name,
         amount: txn.amount,
@@ -2402,9 +2471,27 @@ function WithdrawPanel({ user, profile, wallets, onWithdrawComplete }) {
         destination: destination || null,
         invoiceNumber: txn.invoice_number,
         date: new Date(txn.created_at).toLocaleString(),
-      });
+        });
+      } catch (mailErr) {
+        emailed = false;
+        console.warn('Withdrawal recorded, but the email failed:', mailErr?.message);
+      }
 
-      setSuccess(true);
+      setSuccess({
+        amount:      Number(txn?.amount ?? numAmt),
+        fee:         Number(txn?.fee ?? fee),
+        receive:     Number(txn?.net_amount ?? receive),
+        currency:    wallet,
+        method:      WITHDRAW_METHODS.find(m => m.id === method)?.name || (method === 'bank' ? 'Bank Wire' : 'Crypto'),
+        eta:         WITHDRAW_METHODS.find(m => m.id === method)?.sub || '',
+        destination,
+        reference:   txn?.invoice_number || txn?.reference || (txn?.id ? String(txn.id).slice(0, 8).toUpperCase() : ''),
+        status:      txn?.status || 'pending',
+        date:        txn?.created_at ? new Date(txn.created_at) : new Date(),
+        emailed,
+      });
+      // clear the form behind the popup
+      setAmount(''); setPreset(null); setAccountNum(''); setRouting(''); setCryptoAddr('');
       if (onWithdrawComplete) onWithdrawComplete();
     } catch (err) {
       setError(err.message);
@@ -2413,27 +2500,33 @@ function WithdrawPanel({ user, profile, wallets, onWithdrawComplete }) {
     }
   };
 
-  if (success) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: 16 }}>
-      <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(96,165,250,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Upload size={30} style={{ color: T.bl}} />
-      </div>
-      <div style={{ fontFamily: T.serif, fontSize: 22 }}>Withdrawal <em style={{ color: T.bl, fontStyle: 'italic' }}>Requested!</em></div>
-      <div style={{ fontSize: 13, color: T.nt, textAlign: 'center' }}>
-        <strong style={{ fontFamily: T.mono, color: T.gr }}>${parseFloat(receive).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> will be sent via {WITHDRAW_METHODS.find(m => m.id === method)?.name}.
-        <div style={{ marginTop: 6, fontSize: 12 }}>A confirmation email has been sent to <strong style={{ color: T.gr }}>{profile?.email}</strong></div>
-      </div>
-      <button className="in-btn in-btn-ghost in-btn-sm" onClick={() => { setSuccess(false); setAmount(''); setPreset(null); }}>
-        Make another withdrawal
-      </button>
-    </div>
-  );
-
   return (
     <div className="py-action-layout">
+      {success && <WithdrawSuccessModal receipt={success} email={profile?.email} onClose={() => setSuccess(null)} />}
       <div className="py-form-card">
         <div className="py-form-title">Request <em>Withdrawal</em></div>
         <div className="py-form-sub">Withdrawals are processed within 1–3 business days depending on method.</div>
+
+        {blocked && (
+          <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '4px 0 16px', padding: '12px 14px', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 10, fontSize: 13, lineHeight: 1.55, color: T.am }}>
+            <Lock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div>
+              {(() => {
+                const acc = acct?.account !== 'active';
+                const st = acc ? acct.account : acct?.withdrawals;
+                const until = acc ? acct.account_until : acct?.withdrawal_until;
+                const reason = acc ? acct.account_reason : acct?.withdrawal_reason;
+                const title = acc ? `Your account is ${st}` : st === 'locked' ? 'Withdrawals are locked' : 'Withdrawals are on hold';
+                return (<>
+                  <strong style={{ display: 'block', color: T.gr, marginBottom: 2 }}>{title}</strong>
+                  {st === 'suspended' && until ? `Until ${new Date(until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. ` : st === 'locked' ? 'Until our team unlocks it. ' : ''}
+                  {reason ? `Reason: ${reason.replace(/\.?$/, '.')} ` : ''}
+                </>);
+              })()}
+              <a href="/support" style={{ color: T.am, textDecoration: 'underline' }}>Contact support</a>
+            </div>
+          </div>
+        )}
 
         <div className="py-field">
           <div className="py-field-label">From Wallet</div>
@@ -2519,7 +2612,7 @@ function WithdrawPanel({ user, profile, wallets, onWithdrawComplete }) {
           className="in-btn in-btn-blue in-btn-lg in-btn-full"
           style={{ marginTop: 4, opacity: loading ? 0.6 : 1 }}
           onClick={handleWithdraw}
-          disabled={loading}
+          disabled={loading || !!blocked}
         >
           {loading ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite'}} /> Processing…</> : <><Upload size={16} /> Withdraw ${numAmt ? numAmt.toLocaleString() : '0.00'}</>}
         </button>
@@ -2759,8 +2852,10 @@ export default function Payment() {
     window.location.href = '/login';
   };
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
+  // { silent: true } refreshes the numbers without the full-page loader, so an open
+  // panel (and its success screen or popup) isn't unmounted mid-flow
+  const loadAll = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const u = await getCurrentUser();
       if (!u) { setLoading(false); return; }
@@ -2825,15 +2920,7 @@ export default function Payment() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Inject Chatway live-chat widget
-  useEffect(() => {
-    if (document.getElementById('chatway-widget-script')) return;
-    const script = document.createElement('script');
-    script.id = 'chatway-widget-script';
-    script.src = 'https://cdn.chatway.app/widget.js?id=rES12jPIPPNO';
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+  // Chatway live chat is loaded once for the whole app in App.js (ChatwayWidget)
 
   // Computed values
   const userInitials = profile
@@ -2949,9 +3036,9 @@ export default function Payment() {
                 </div>
 
                 {/* Content — pass live data to all panels */}
-                {tab === 'plans'    && <PlansPanel activeSub={activeSub} dbPlans={dbPlans} userId={user?.id} onUpgrade={loadAll} cryptoCoins={cryptoCoins} symbol={currencySymbol(userCurrency)} fxRate={fxRate} />}
-                {tab === 'deposit'  && <DepositPanel user={user} profile={profile} wallets={wallets} currency={userCurrency} onDepositComplete={loadAll} cryptoCoins={cryptoCoins} />}
-                {tab === 'withdraw' && <WithdrawPanel user={user} profile={profile} wallets={wallets} onWithdrawComplete={loadAll} />}
+                {tab === 'plans'    && <PlansPanel activeSub={activeSub} dbPlans={dbPlans} userId={user?.id} onUpgrade={() => loadAll({ silent: true })} cryptoCoins={cryptoCoins} symbol={currencySymbol(userCurrency)} fxRate={fxRate} />}
+                {tab === 'deposit'  && <DepositPanel user={user} profile={profile} wallets={wallets} currency={userCurrency} onDepositComplete={() => loadAll({ silent: true })} cryptoCoins={cryptoCoins} />}
+                {tab === 'withdraw' && <WithdrawPanel user={user} profile={profile} wallets={wallets} onWithdrawComplete={() => loadAll({ silent: true })} />}
                 {tab === 'history'  && <TransactionsPanel userId={user?.id} wallets={wallets} />}
               </>
             )}

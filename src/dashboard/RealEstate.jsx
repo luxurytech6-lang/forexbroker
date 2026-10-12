@@ -25,7 +25,7 @@ import {
 import {
   LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers,
   Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
-  CreditCard as DkCard, UserCircle as DkUser, Settings as DkSettings, Headset as DkHeadset,
+  CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset,
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 import supabase from "../supabase";
@@ -251,6 +251,7 @@ const DK_NAV = [
     { key:'payments',  href:'/payments',     Icon:DkCard,      label:'Payments' },
     { key:'cards',     href:'/cards',        Icon:DkCards,     label:'Cards' },
     { key:'profile',   href:'/profile',      Icon:DkUser,      label:'Profile' },
+    { key:'identity',  href:'/verify-identity', Icon:DkShield,  label:'Verify identity' },
     { key:'settings',  href:'/settings',     Icon:DkSettings,  label:'Settings' },
     { key:'support',   href:'/support',      Icon:DkHeadset,   label:'Support' },
   ]},
@@ -666,7 +667,8 @@ function PropertyCard({ p, i, onOpen }) {
 function PropertyDrawer({ p, seed, isSample, userId, onClose, onInvested }) {
   const min = Number(p.min_investment || 100);
   const [amount, setAmount] = useState(String(Math.max(min, 1000)));
-  const [stage, setStage] = useState('form');       // form | pay | done
+  const [stage, setStage] = useState('form');       // form | done
+  const [paying, setPaying] = useState(false);      // payment modal open
   const val = Number(amount) || 0;
   const shares = Math.floor(val / Number(p.share_price || 10));
   const yearly = val * (Number(p.target_yield) / 100);
@@ -688,13 +690,14 @@ function PropertyDrawer({ p, seed, isSample, userId, onClose, onInvested }) {
     val < min ? `The minimum investment is ${usd(min)}.` :
     val > remaining ? `Only ${usd(remaining)} of this property is still available.` : '';
 
-  /* Called by CryptoCheckout once the proof is uploaded: file a pending investment */
+  /* Called by the payment modal once the proof is uploaded: file a pending investment */
   const submitPayment = async (pay) => {
     const { error: insErr } = await supabase.from('property_investments').insert({
       user_id: userId, property_id: p.id, amount: val, shares, status: 'pending',
-      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath,
+      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath, payment_tx_id: pay.transactionId,
     });
     if (insErr) throw insErr;
+    setPaying(false);
     setStage('done');
     onInvested?.();
   };
@@ -716,16 +719,6 @@ function PropertyDrawer({ p, seed, isSample, userId, onClose, onInvested }) {
               <p className="re-desc">We've received your <strong style={{ color:'var(--text)' }}>{usd(val)}</strong> payment for {p.name}. Your shares become active once we confirm it, usually within a few hours. You'll find the investment under My holdings, marked pending until then.</p>
               <button className="re-btn re-btn-accent" style={{ marginTop:10 }} onClick={onClose}>Done</button>
             </div>
-          </div>
-        ) : stage === 'pay' ? (
-          <div className="re-drawer-body">
-            <div>
-              <div className="re-loc" style={{ marginBottom:6 }}><MapPin />{p.city}, {p.country}</div>
-              <div className="re-drawer-name" style={{ fontSize:28 }}>Pay for your shares</div>
-              <p className="re-desc" style={{ marginTop:6 }}>{shares.toLocaleString('en-US')} shares in {p.name}. Send the payment, attach a screenshot, and your shares go live once we confirm it.</p>
-            </div>
-            <CryptoCheckout amount={val} label={`${p.name} · ${shares.toLocaleString('en-US')} shares`} userId={userId}
-              context={`property-${p.id}`} onSubmit={submitPayment} onBack={() => setStage('form')} />
           </div>
         ) : (
           <>
@@ -771,13 +764,26 @@ function PropertyDrawer({ p, seed, isSample, userId, onClose, onInvested }) {
             </div>
 
             <div className="re-drawer-foot">
-              <button className="re-btn re-btn-accent" disabled={!!problem || !userId} onClick={() => setStage('pay')}>
-                <Building2 />Continue to payment{val ? ` · ${usd(val)}` : ''}
+              <button className="re-btn re-btn-accent" disabled={!!problem || !userId} onClick={() => setPaying(true)}>
+                <Building2 />Invest {usd(val)}
               </button>
             </div>
           </>
         )}
       </aside>
+      {paying && (
+        <CryptoCheckout
+          title="Investment payment"
+          amount={val}
+          label={`${p.name} · ${shares.toLocaleString('en-US')} shares`}
+          confirmLabel="Confirm investment payment"
+          userId={userId}
+          context={`property-${p.id}`}
+          transaction={{ type: 'property_investment', description: `Property investment: ${p.name} (${shares.toLocaleString('en-US')} shares)` }}
+          onSubmit={submitPayment}
+          onClose={() => setPaying(false)}
+        />
+      )}
     </>
   );
 }

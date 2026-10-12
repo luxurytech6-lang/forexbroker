@@ -8,12 +8,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   LayoutDashboard, Users as UsersIcon, ArrowLeftRight, Crown, Pickaxe, Building2, CreditCard,
   Headset, LineChart, Bot, Wallet, Bell, LogOut, Menu, ExternalLink, Loader2, RefreshCw, ScrollText,
-  CandlestickChart, Copy, Users2, Lightbulb,
+  CandlestickChart, Copy, Users2, Lightbulb, BadgeCheck,
 } from 'lucide-react';
 import { ADMIN_CSS, supabase, useAdminGuard, adminLogout, ToastProvider, userName, initials } from './adminShared';
 
 import Overview       from './sections/Overview';
 import UsersSection   from './sections/Users';
+import IdentityAdmin  from './sections/Identity';
 import Transactions   from './sections/Transactions';
 import Subscriptions  from './sections/Subscriptions';
 import MiningAdmin    from './sections/Mining';
@@ -37,6 +38,7 @@ export const SECTIONS = [
   ]},
   { group:'People & money', items:[
     { key:'users',         label:'Users',             Icon:UsersIcon,       Comp:UsersSection },
+    { key:'identity',      label:'Identity checks',   Icon:BadgeCheck,      Comp:IdentityAdmin, count:'identity' },
     { key:'transactions',  label:'Transactions',      Icon:ArrowLeftRight, Comp:Transactions, count:'transactions' },
     { key:'subscriptions', label:'Subscriptions',     Icon:Crown,           Comp:Subscriptions, count:'subscriptions' },
     { key:'wallets',       label:'Deposit addresses', Icon:Wallet,          Comp:CryptoWallets },
@@ -69,6 +71,7 @@ const COUNTERS = {
   // purchases (property, mining, cards, copy trading) are counted in their own sections
   transactions:  () => supabase.from('transactions').select('id', { count:'exact', head:true }).eq('status', 'pending')
                         .not('type', 'in', '(property_investment,mining_purchase,card_order,copy_trading)'),
+  identity:      () => supabase.from('identity_verifications').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   subscriptions: () => supabase.from('subscription_payment_requests').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   mining:        () => supabase.from('mining_contracts').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   property:      () => supabase.from('property_investments').select('id', { count:'exact', head:true }).eq('status', 'pending'),

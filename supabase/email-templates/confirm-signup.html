@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="supported-color-schemes" content="dark light">
+<title>Confirm your email address</title>
+<style>
+  @media only screen and (max-width:600px){
+    .card{border-radius:0!important;border-left:0!important;border-right:0!important}
+    .px{padding-left:22px!important;padding-right:22px!important}
+    .code{font-size:30px!important;letter-spacing:6px!important}
+    .h1{font-size:27px!important}
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#07101E;-webkit-text-size-adjust:100%">
+
+<!-- Inbox preview text -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#07101E;font-size:1px;line-height:1px">
+  Your Profit Gain Signals confirmation code is {{ .Token }}. Enter it to finish signing up.&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#07101E">
+  <tr><td align="center" style="padding:32px 12px">
+
+    <table role="presentation" class="card" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#0C1A2E;border:1px solid #1C2C45;border-radius:18px">
+
+      <!-- Gold top rule -->
+      <tr><td style="height:4px;line-height:4px;font-size:0;background:#E2AE4A;border-radius:18px 18px 0 0">&nbsp;</td></tr>
+
+      <!-- Brand -->
+      <tr><td class="px" style="padding:28px 40px 6px;font-family:Georgia,'Times New Roman',serif">
+        <div style="font-size:22px;color:#EEF2F7">Profit Gain <span style="color:#E2AE4A">Signals</span></div>
+      </td></tr>
+
+      <!-- Heading -->
+      <tr><td class="px" style="padding:22px 40px 6px;font-family:Georgia,'Times New Roman',serif">
+        <h1 class="h1" style="margin:0;font-size:31px;line-height:1.2;font-weight:400;color:#EEF2F7">Confirm your email address</h1>
+      </td></tr>
+
+      <!-- Intro -->
+      <tr><td class="px" style="padding:10px 40px 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#8A9AB2">
+        You're one step away from your account. Enter the code below on the sign-up page to confirm
+        <strong style="color:#EEF2F7">{{ .Email }}</strong> and finish signing up.
+      </td></tr>
+
+      <!-- Code -->
+      <tr><td class="px" style="padding:0 40px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#112238;border:1px solid #2A3D5C;border-radius:14px">
+          <tr><td align="center" style="padding:22px 16px 6px;font-family:Arial,Helvetica,sans-serif;font-size:11.5px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8A9AB2">
+            Your confirmation code
+          </td></tr>
+          <tr><td align="center" style="padding:4px 12px 8px">
+            <div class="code" style="font-family:'SFMono-Regular',Menlo,Consolas,'Courier New',monospace;font-size:38px;line-height:1.2;font-weight:700;letter-spacing:10px;color:#E2AE4A;padding-left:10px">{{ .Token }}</div>
+          </td></tr>
+          <tr><td align="center" style="padding:2px 16px 22px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#8A9AB2">
+            This code expires in <strong style="color:#EEF2F7">1 hour</strong>.
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <!-- Steps -->
+      <tr><td class="px" style="padding:26px 40px 4px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td width="34" valign="top" style="padding:0 12px 14px 0">
+              <div style="width:26px;height:26px;border-radius:13px;background:rgba(226,174,74,.15);color:#E2AE4A;font:700 13px/26px Arial,sans-serif;text-align:center">1</div>
+            </td>
+            <td valign="top" style="padding:3px 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#8A9AB2">
+              Go back to the <strong style="color:#EEF2F7">Check your email</strong> screen where you signed up.
+            </td>
+          </tr>
+          <tr>
+            <td width="34" valign="top" style="padding:0 12px 14px 0">
+              <div style="width:26px;height:26px;border-radius:13px;background:rgba(226,174,74,.15);color:#E2AE4A;font:700 13px/26px Arial,sans-serif;text-align:center">2</div>
+            </td>
+            <td valign="top" style="padding:3px 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#8A9AB2">
+              Type or paste the code above. Your account opens straight away.
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+
+      <!-- Security note -->
+      <tr><td class="px" style="padding:8px 40px 30px">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.22);border-radius:12px">
+          <tr><td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#C9A55A">
+            <strong style="color:#F2C46B">Keep this code private.</strong>
+            Our team will never ask you for it by phone, chat or email. If you didn't try to sign up, you can ignore this message and no account will be created.
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td class="px" style="padding:18px 40px 26px;border-top:1px solid #1C2C45;font-family:Arial,Helvetica,sans-serif;font-size:11.5px;line-height:1.65;color:#56677F">
+        You're receiving this because this address was used to create an account at
+        <a href="{{ .SiteURL }}" style="color:#8A9AB2;text-decoration:underline">Profit Gain Signals</a>.<br>
+        Trading and investing involve risk. Past performance does not guarantee future results.
+      </td></tr>
+
+    </table>
+
+  </td></tr>
+</table>
+</body>
+</html>

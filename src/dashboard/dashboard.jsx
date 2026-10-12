@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import supabase from "../supabase";
+import IdentityBanner from "../account/IdentityBanner";
 import {
   LayoutDashboard, Copy, Users, TrendingUp, Bot, CandlestickChart,
-  CreditCard, UserCircle, Settings, Headset, Building2, Pickaxe, Wallet as Wallet2, WalletCards,
+  CreditCard, UserCircle, ShieldCheck, Settings, Headset, Building2, Pickaxe, Wallet as Wallet2, WalletCards,
   Search, Bell, LogOut, Download, Plus, ChevronRight, ArrowUpRight,
   Rocket, Crown, Zap, Leaf, CircleCheck, LineChart,
 } from "lucide-react";
@@ -555,6 +556,7 @@ const ACCOUNT_LINKS = [
   { href:'/payments', Icon:CreditCard, label:'Payments' },
   { href:'/cards',    Icon:WalletCards, label:'Cards' },
   { href:'/profile',  Icon:UserCircle, label:'Profile'  },
+  { href:'/verify-identity', Icon:ShieldCheck, label:'Verify identity' },
   { href:'/settings', Icon:Settings,   label:'Settings' },
   { href:'/support',  Icon:Headset,    label:'Support'  },
 ];
@@ -1117,15 +1119,7 @@ export default function Dashboard() {
   // Apply cached appearance immediately on mount (before DB responds)
   useEffect(() => { applyAppearance(); }, []);
 
-  // Inject Chatway live-chat widget
-  useEffect(() => {
-    if (document.getElementById('chatway-widget-script')) return;
-    const script = document.createElement('script');
-    script.id = 'chatway-widget-script';
-    script.src = 'https://cdn.chatway.app/widget.js?id=rES12jPIPPNO';
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+  // Chatway live chat is loaded once for the whole app in App.js (ChatwayWidget)
 
   useEffect(() => {
     let mounted = true;
@@ -1347,6 +1341,9 @@ export default function Dashboard() {
                 <a href="/payments" className="btn btn-accent"><Wallet2 />Deposit</a>
               </div>
             </div>
+
+            {/* Shows until the user's identity is verified */}
+            <IdentityBanner />
 
             <Hero snapshot={snapshot} currSymbol={currSymbol} allocated={allocated} bars={perfBars} />
             <Kpis snapshot={snapshot} copies={copyRels.length} />

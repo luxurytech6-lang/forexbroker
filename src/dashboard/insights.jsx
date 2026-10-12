@@ -6,7 +6,7 @@ import {
 import {
   LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers,
   Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
-  CreditCard as DkCard, UserCircle as DkUser, Settings as DkSettings, Headset as DkHeadset,
+  CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset,
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 
@@ -661,6 +661,7 @@ const DK_NAV = [
     { key:'payments',  href:'/payments',     Icon:DkCard,      label:'Payments' },
     { key:'cards',     href:'/cards',        Icon:DkCards,     label:'Cards' },
     { key:'profile',   href:'/profile',      Icon:DkUser,      label:'Profile' },
+    { key:'identity',  href:'/verify-identity', Icon:DkShield,  label:'Verify identity' },
     { key:'settings',  href:'/settings',     Icon:DkSettings,  label:'Settings' },
     { key:'support',   href:'/support',      Icon:DkHeadset,   label:'Support' },
   ]},
@@ -1542,15 +1543,7 @@ export default function Insights() {
   const [impactFilter, setImpactFilter] = useState('All Impact');
   const [settings,    setSettings]    = useState(DEFAULT_SETTINGS);
 
-  // Inject Chatway live-chat widget
-  useEffect(() => {
-    if (document.getElementById('chatway-widget-script')) return;
-    const script = document.createElement('script');
-    script.id = 'chatway-widget-script';
-    script.src = 'https://cdn.chatway.app/widget.js?id=rES12jPIPPNO';
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+  // Chatway live chat is loaded once for the whole app in App.js (ChatwayWidget)
 
   // Metrics derived from DB counts
   const [metrics, setMetrics] = useState([
