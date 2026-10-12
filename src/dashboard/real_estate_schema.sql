@@ -5,7 +5,8 @@
 --   properties             listings
 --   property_investments   a user's positions
 --   property_payouts       rent paid out to a user
---   invest_in_property()   checks the wallet, debits it and records the position
+--   invest_in_property()   pays from the wallet (not used by the page any more — the page now
+--                          takes crypto + a proof screenshot and files a pending investment)
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ─── Admin check (identical in every schema file) ───────────────────────────
@@ -60,6 +61,12 @@ create table if not exists public.property_investments (
 );
 create index if not exists property_investments_user_idx     on public.property_investments(user_id);
 create index if not exists property_investments_property_idx on public.property_investments(property_id);
+
+-- ─── Crypto payment details (filled in by the page; checked by an admin) ────
+alter table public.property_investments add column if not exists pay_coin    text;   -- e.g. USDT
+alter table public.property_investments add column if not exists pay_network text;   -- e.g. TRC-20
+alter table public.property_investments add column if not exists pay_tx_hash text;   -- optional, pasted by the user
+alter table public.property_investments add column if not exists proof_url   text;   -- path in the private payment-proofs bucket
 
 create table if not exists public.property_payouts (
   id           uuid primary key default gen_random_uuid(),
@@ -167,3 +174,32 @@ begin
   return v_id;
 end $$;
 grant execute on function public.invest_in_property(uuid,numeric) to authenticated;
+
+
+-- ─── Starter listings (only added if the table is empty) ────────────────────
+-- The same six properties the page shows as samples, now as live listings.
+-- Edit, hide (status = 'draft') or delete them any time from Admin → Real estate → Properties.
+insert into public.properties
+  (name, type, city, country, featured, description, target_yield, appreciation, hold_years,
+   min_investment, share_price, total_value, funded_amount, investors_count, occupancy, status)
+select * from (values
+  ('Riverside Apartments', 'residential', 'Manchester', 'United Kingdom', true,
+   'A 48-unit apartment block a short walk from Manchester city centre, fully let on 12-month tenancies with a professional managing agent. Rent is collected monthly and distributed to shareholders each quarter.',
+   7.2::numeric, 3.0::numeric, 5, 100::numeric, 10::numeric, 2400000::numeric, 1968000::numeric, 1284, 97::numeric, 'open'),
+  ('Marina Business Suites', 'commercial', 'Dubai', 'United Arab Emirates', false,
+   'Twelve floors of Grade A office space in Dubai Marina, leased to a mix of regional firms on five-year terms with built-in annual rent reviews.',
+   8.1, 2.5, 7, 250, 25, 5200000, 3328000, 2210, 92, 'open'),
+  ('Garden Terraces', 'residential', 'Lisbon', 'Portugal', false,
+   'Twenty-two renovated family homes in a quiet Lisbon neighbourhood with strong long-term rental demand from local families.',
+   6.4, 4.0, 4, 100, 10, 3100000, 1271000, 640, 100, 'open'),
+  ('Lekki Waterfront Residences', 'residential', 'Lagos', 'Nigeria', false,
+   'A gated block of serviced apartments on the Lekki peninsula, let to corporate tenants on annual leases paid in advance.',
+   9.4, 5.0, 5, 100, 10, 1800000, 1530000, 915, 95, 'open'),
+  ('Northgate Logistics Park', 'industrial', 'Rotterdam', 'Netherlands', false,
+   'A modern warehouse and distribution hub near the Port of Rotterdam, fully let to a single logistics operator on a 10-year lease.',
+   6.9, 2.0, 6, 500, 50, 7500000, 2625000, 430, 100, 'open'),
+  ('Harbour View Hotel', 'hospitality', 'Cape Town', 'South Africa', false,
+   'A 96-room hotel on the Cape Town waterfront run by an established operator under a long-term management agreement.',
+   8.6, 3.5, 7, 250, 25, 6400000, 5760000, 1790, 81, 'open')
+) as v
+where not exists (select 1 from public.properties);

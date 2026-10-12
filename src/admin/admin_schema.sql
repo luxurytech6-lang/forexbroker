@@ -7,7 +7,8 @@
 --   2. dashboard/payments_schema.sql
 --   3. dashboard/real_estate_schema.sql
 --   4. dashboard/mining_schema.sql
---   5. this file
+--   5. dashboard/trading_schema.sql
+--   6. this file
 --
 -- How admin access works
 --   Admins sign in at /admin/login with a normal Supabase Auth account.

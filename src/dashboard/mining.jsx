@@ -12,9 +12,12 @@
  *   start_mining_contract()   RPC: checks the wallet, debits it and starts the contract
  *   process_mining_payouts()  RPC: pays every full day earned (run by an admin or pg_cron)
  *
+ * Paying: the user pays in crypto to a platform address and attaches a
+ * screenshot (payment/CryptoCheckout.jsx). That files a *pending* contract,
+ * which starts mining once an admin checks the proof (Admin → Mining).
+ *
  * Until mining_plans has rows the page shows clearly labelled sample plans and
- * buying is turned off. If start_mining_contract() isn't installed yet, a
- * purchase is filed as a pending contract for an admin to approve.
+ * buying is turned off.
  */
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
@@ -28,6 +31,7 @@ import {
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 import supabase from "../supabase";
+import CryptoCheckout from "../payment/CryptoCheckout";
 
 /* ─── Page layout + visual system ─────────────────────────────────────────── */
 const GLOBAL_CSS = `
@@ -602,13 +606,11 @@ function PlanCard({ p, onOpen }) {
 }
 
 /* ─── Buy drawer ──────────────────────────────────────────────────────────── */
-function PlanDrawer({ p, isSample, balance, onClose, onBought }) {
+function PlanDrawer({ p, isSample, userId, onClose, onBought }) {
   const min = Number(p.min_investment || 100);
   const max = Number(p.max_investment || 0) || 100000;
   const [amount, setAmount] = useState(String(min));
-  const [stage, setStage]   = useState('form');   // form | confirm | busy | done
-  const [pendingOnly, setPendingOnly] = useState(false);
-  const [error, setError]   = useState('');
+  const [stage, setStage]   = useState('form');   // form | pay | done
   const val     = Number(amount) || 0;
   const daily   = val * Number(p.daily_return_pct) / 100;
   const total   = daily * Number(p.duration_days);
@@ -624,37 +626,24 @@ function PlanDrawer({ p, isSample, balance, onClose, onBought }) {
   const problem =
     isSample ? 'This is a sample plan, so buying is turned off.' :
     val < min ? `The minimum for this plan is ${usd(min, 0)}.` :
-    val > max ? `The maximum for this plan is ${usd(max, 0)}.` :
-    balance != null && val > balance ? `Your wallet balance is ${usd(balance)}. Deposit funds to buy this contract.` : '';
+    val > max ? `The maximum for this plan is ${usd(max, 0)}.` : '';
 
-  const buy = async () => {
-    setStage('busy'); setError('');
-    try {
-      const { error: rpcErr } = await supabase.rpc('start_mining_contract', { p_plan_id: p.id, p_amount: val });
-      if (rpcErr) {
-        // RPC not installed yet: file a pending contract for an admin to approve
-        if (rpcErr.code === 'PGRST202' || /function .* does not exist/i.test(rpcErr.message || '')) {
-          const { data: { session } } = await supabase.auth.getSession();
-          const { error: insErr } = await supabase.from('mining_contracts').insert({
-            user_id: session?.user?.id, plan_id: p.id, coin: p.coin, amount: val,
-            daily_return_pct: p.daily_return_pct, duration_days: p.duration_days,
-            hashrate: Number(hash.toFixed(4)), hashrate_unit: p.hashrate_unit, status: 'pending',
-          });
-          if (insErr) throw insErr;
-          setPendingOnly(true);
-        } else throw rpcErr;
-      }
-      setStage('done');
-      onBought?.();
-    } catch (e) {
-      setError(e?.message || 'Something went wrong. Please try again.');
-      setStage('confirm');
-    }
+  /* Called by CryptoCheckout once the proof is uploaded: file a pending contract */
+  const submitPayment = async (pay) => {
+    const { error: insErr } = await supabase.from('mining_contracts').insert({
+      user_id: userId, plan_id: p.id, coin: p.coin, amount: val,
+      daily_return_pct: p.daily_return_pct, duration_days: p.duration_days,
+      hashrate: Number(hash.toFixed(4)), hashrate_unit: p.hashrate_unit, status: 'pending',
+      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath,
+    });
+    if (insErr) throw insErr;
+    setStage('done');
+    onBought?.();
   };
 
   return (
     <>
-      <div className="mn-overlay" onClick={() => stage !== 'busy' && onClose()} />
+      <div className="mn-overlay" onClick={onClose} />
       <aside className="mn-drawer" role="dialog" aria-modal="true" aria-label={p.name}>
         <div className="mn-drawer-head">
           <CoinBadge coin={p.coin} />
@@ -669,14 +658,16 @@ function PlanDrawer({ p, isSample, balance, onClose, onBought }) {
           <div className="mn-drawer-body">
             <div className="mn-success">
               <CheckCircle2 size={48} />
-              <div className="mn-drawer-name">{pendingOnly ? 'Contract requested' : 'Your rig is running'}</div>
-              <p className="mn-desc">
-                {pendingOnly
-                  ? <>Your {usd(val)} contract on {p.name} has been sent for approval. It starts mining as soon as an admin confirms it.</>
-                  : <>Your {usd(val)} contract on {p.name} is live. Earnings build up from now and are paid to your wallet every day for {p.duration_days} days.</>}
-              </p>
+              <div className="mn-drawer-name">Payment submitted</div>
+              <p className="mn-desc">We've received your {usd(val)} payment for {p.name}. Your contract starts mining as soon as we confirm it, usually within a few hours, and then pays out every day for {p.duration_days} days.</p>
               <button className="re-btn re-btn-accent" style={{ marginTop:10 }} onClick={onClose}>Done</button>
             </div>
+          </div>
+        ) : stage === 'pay' ? (
+          <div className="mn-drawer-body">
+            <p className="mn-desc">Send the payment and attach a screenshot. Your {hash.toLocaleString('en-US', { maximumFractionDigits:2 })} {p.hashrate_unit} contract starts once we confirm it.</p>
+            <CryptoCheckout amount={val} label={`${p.name} · ${p.duration_days}-day contract`} userId={userId}
+              context={`mining-${p.id}`} onSubmit={submitPayment} onBack={() => setStage('form')} />
           </div>
         ) : (
           <>
@@ -707,21 +698,11 @@ function PlanDrawer({ p, isSample, balance, onClose, onBought }) {
                   <div><span>Over {p.duration_days} days</span><strong className="up">+{usd(total)}</strong></div>
                 </div>
                 <p style={{ fontSize:12.5, color:'var(--faint)', marginTop:10 }}>Returns depend on network difficulty and coin prices. Figures shown are the plan's target, not a guarantee.</p>
-                {problem && stage !== 'busy' && <div className="mn-err">{problem}</div>}
-                {error && <div className="mn-err">{error}</div>}
+                {problem && <div className="mn-err">{problem}</div>}
               </div>
             </div>
             <div className="mn-drawer-foot">
-              {stage === 'form' ? (
-                <button className="re-btn re-btn-accent" disabled={!!problem} onClick={() => setStage('confirm')}><Pickaxe />Buy {val ? usd(val, 0) : ''} contract</button>
-              ) : (
-                <>
-                  <button className="re-btn re-btn-ghost" style={{ flex:'0 0 auto' }} disabled={stage === 'busy'} onClick={() => setStage('form')}>Back</button>
-                  <button className="re-btn re-btn-accent" disabled={stage === 'busy' || !!problem} onClick={buy}>
-                    {stage === 'busy' ? 'Starting…' : `Confirm ${usd(val)} from wallet`}
-                  </button>
-                </>
-              )}
+              <button className="re-btn re-btn-accent" disabled={!!problem || !userId} onClick={() => setStage('pay')}><Pickaxe />Continue to payment{val ? ` · ${usd(val, 0)}` : ''}</button>
             </div>
           </>
         )}
@@ -745,6 +726,7 @@ function useNow(active, ms = 1000) {
 export default function Mining() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser]           = useState(null);
+  const [userId, setUserId]       = useState(null);
   const [balance, setBalance]     = useState(null);
   const [plans, setPlans]         = useState(null);   // null = loading
   const [isSample, setIsSample]   = useState(false);
@@ -763,6 +745,7 @@ export default function Mining() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { window.location.href = '/login'; return; }
       const uid = session.user.id;
+      setUserId(uid);
 
       const [profileRes, walletRes, settingsRes, plansRes, conRes, payRes] = await Promise.all([
         supabase.from('users').select('first_name,last_name,email,plan,is_verified,currency').eq('id', uid).maybeSingle(),
@@ -1002,7 +985,7 @@ export default function Mining() {
 
       {open && (
         <PlanDrawer
-          p={open} isSample={isSample || String(open.id).startsWith('sample-')} balance={balance}
+          p={open} isSample={isSample || String(open.id).startsWith('sample-')} userId={userId}
           onClose={() => setOpen(null)}
           onBought={() => setReloadKey(k => k + 1)}
         />

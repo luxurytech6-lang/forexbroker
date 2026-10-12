@@ -9,7 +9,11 @@
  *   cards               issued cards (last 4 digits only; never the full number)
  *   card_orders         orders and their delivery status
  *   card_transactions   card payments, written by the issuer integration
- *   order_card()        RPC: checks the wallet, charges the fee, records the order
+ *   order_card()        RPC: records free (virtual) card orders
+ *
+ * Paying for a card: paid cards are paid in crypto to a platform address with a
+ * screenshot attached (payment/CryptoCheckout.jsx). That files a *pending*
+ * order, which an admin confirms after checking the proof (Admin → Cards).
  *   set_card_controls() RPC: freeze / online / contactless / monthly limit
  *   report_card_lost()  RPC: blocks a card for good
  *
@@ -28,6 +32,7 @@ import {
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 import supabase from "../supabase";
+import CryptoCheckout from "../payment/CryptoCheckout";
 
 /* ─── Page layout + visual system ─────────────────────────────────────────── */
 const GLOBAL_CSS = `
@@ -679,7 +684,7 @@ function TiltCard(props) {
 }
 
 /* ─── Order drawer ────────────────────────────────────────────────────────── */
-function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
+function OrderDrawer({ initialProduct, user, onClose, onOrdered }) {
   const [product, setProduct] = useState(initialProduct || 'virtual');
   const p = PRODUCT[product];
   const [design, setDesign] = useState(p.designs[0]);
@@ -689,7 +694,10 @@ function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pendingOnly, setPendingOnly] = useState(false);
+  const [paying, setPaying] = useState(false);       // crypto payment step for paid cards
+  const [userId, setUserId] = useState(null);
 
+  useEffect(() => { supabase.auth.getSession().then(({ data }) => setUserId(data?.session?.user?.id || null)); }, []);
   useEffect(() => { setDesign(PRODUCT[product].designs[0]); }, [product]);
   useEffect(() => {
     const k = (e) => { if (e.key === 'Escape' && !busy) onClose(); };
@@ -702,7 +710,6 @@ function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
   const reviewStep = p.physical ? 2 : 1;
   const nameOk = name.trim().length >= 3;
   const addrOk = ['line1', 'city', 'postal', 'country', 'phone'].every(k => addr[k].trim());
-  const short = balance != null && p.price > balance;
 
   const next = () => {
     setError('');
@@ -712,12 +719,26 @@ function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
   };
   const back = () => { setError(''); setStep(s => (s === reviewStep && !p.physical ? 0 : s - 1)); };
 
+  const deliveryInfo = () => (p.physical ? {
+    line1:addr.line1.trim(), line2:addr.line2.trim() || null, city:addr.city.trim(), region:addr.region.trim() || null,
+    postal_code:addr.postal.trim(), country:addr.country.trim(), phone:addr.phone.trim(),
+  } : null);
+
+  /* Paid cards: CryptoCheckout uploads the proof, then this files a pending order */
+  const submitPayment = async (pay) => {
+    const { error: insErr } = await supabase.from('card_orders').insert({
+      user_id: userId, product, design, name_on_card: name.trim(), delivery: deliveryInfo(), fee: p.price, status: 'pending',
+      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath,
+    });
+    if (insErr) throw new Error(isMissingTable(insErr) ? 'Card ordering isn’t set up yet. Please try again later.' : insErr.message);
+    setPendingOnly(true); setPaying(false); setStep(3);
+    onOrdered?.();
+  };
+
   const place = async () => {
+    if (p.price > 0) { setError(''); setPaying(true); return; }   // paid card → crypto payment step
     setBusy(true); setError('');
-    const delivery = p.physical ? {
-      line1:addr.line1.trim(), line2:addr.line2.trim() || null, city:addr.city.trim(), region:addr.region.trim() || null,
-      postal_code:addr.postal.trim(), country:addr.country.trim(), phone:addr.phone.trim(),
-    } : null;
+    const delivery = deliveryInfo();
     try {
       const { error: rpcErr } = await supabase.rpc('order_card', {
         p_product: product, p_design: design, p_name_on_card: name.trim(), p_delivery: delivery,
@@ -758,10 +779,10 @@ function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
               <CheckCircle2 size={44} />
               <h4>{p.physical ? 'Your card is on its way' : 'Your card is being set up'}</h4>
               <p>
-                {pendingOnly
-                  ? `We've received your order for a ${p.name.toLowerCase()}. Our team will confirm it${p.price ? ` and charge the ${usd(p.price, 0)} fee` : ''} shortly.`
-                  : p.physical
-                    ? `We've charged ${usd(p.price, 0)} to your wallet. Delivery takes ${p.delivery.toLowerCase()}, and you can follow it under Orders.`
+                {pendingOnly && p.price
+                  ? `We've received your ${usd(p.price, 0)} payment for a ${p.name.toLowerCase()}. We'll start on your card as soon as we've confirmed it, usually within a few hours, and you can follow it under Orders.`
+                  : pendingOnly
+                    ? `We've received your order for a ${p.name.toLowerCase()}. Our team will confirm it shortly.`
                     : 'It will appear under My cards as soon as it’s approved, usually within a few minutes.'}
               </p>
               <button className="cd-btn cd-btn-accent" onClick={onClose}>Done</button>
@@ -818,7 +839,11 @@ function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
                 </>
               )}
 
-              {step === reviewStep && (
+              {paying && (
+                <CryptoCheckout amount={p.price} label={`${p.name} · ${DESIGNS[design]?.label || design}`} userId={userId}
+                  context={`card-${product}`} onSubmit={submitPayment} onBack={() => setPaying(false)} submitLabel="I've sent the payment" />
+              )}
+              {step === reviewStep && !paying && (
                 <>
                   <div className="cd-review num">
                     <div><span>Card</span><strong>{p.name}</strong></div>
@@ -826,10 +851,8 @@ function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
                     <div><span>Name on card</span><strong>{name}</strong></div>
                     {p.physical && <div><span>Deliver to</span><strong>{[addr.line1, addr.city, addr.country].filter(Boolean).join(', ')}</strong></div>}
                     <div><span>{p.physical ? 'Delivery' : 'Ready'}</span><strong>{p.delivery}</strong></div>
-                    {balance != null && <div><span>Wallet after this</span><strong>{usd(balance - p.price)}</strong></div>}
-                    <div><span>Fee, charged from your wallet</span><strong>{p.price ? usd(p.price, 0) : 'Free'}</strong></div>
+                    <div><span>{p.price ? 'Card fee, paid in crypto' : 'Card fee'}</span><strong>{p.price ? usd(p.price, 0) : 'Free'}</strong></div>
                   </div>
-                  {short && <div className="cd-msg err">Your wallet balance is {usd(balance)}. <a href="/payments" style={{ textDecoration:'underline' }}>Deposit funds</a> to order this card.</div>}
                 </>
               )}
 
@@ -838,12 +861,12 @@ function OrderDrawer({ initialProduct, user, balance, onClose, onOrdered }) {
           )}
         </div>
 
-        {step !== 3 && (
+        {step !== 3 && !paying && (
           <div className="cd-drawer-foot">
             {step > 0 && <button className="cd-btn cd-btn-ghost" onClick={back} disabled={busy}>Back</button>}
             {step !== reviewStep
               ? <button className="cd-btn cd-btn-accent" onClick={next}>Continue <ChevronRight /></button>
-              : <button className="cd-btn cd-btn-accent" onClick={place} disabled={busy || short}>{busy ? 'Placing order…' : p.price ? `Pay ${usd(p.price, 0)} and order` : 'Order card'}</button>}
+              : <button className="cd-btn cd-btn-accent" onClick={place} disabled={busy || (p.price > 0 && !userId)}>{busy ? 'Placing order…' : p.price ? `Continue to payment · ${usd(p.price, 0)}` : 'Order card'}</button>}
           </div>
         )}
       </aside>
@@ -1214,7 +1237,7 @@ export default function Cards() {
       </div>
 
       {ordering && (
-        <OrderDrawer initialProduct={ordering} user={user} balance={balance}
+        <OrderDrawer initialProduct={ordering} user={user}
           onClose={() => setOrdering(null)} onOrdered={() => setReloadKey(k => k + 1)} />
       )}
 

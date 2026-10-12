@@ -5,6 +5,7 @@
 --   transactions.proof_url          path of the payment screenshot (MarketPlace.jsx, deposits)
 --   subscription_payment_requests   plan payments waiting for an admin (payment.jsx)
 --   storage bucket "payment-proofs" private bucket for the screenshots
+--   card_orders payment columns     crypto payment details for paid cards (Cards.jsx)
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ─── Admin check (identical in every schema file) ───────────────────────────
@@ -79,3 +80,15 @@ create policy "payment proofs: read own" on storage.objects
 drop policy if exists "admins read payment proofs" on storage.objects;
 create policy "admins read payment proofs" on storage.objects
   for select using (bucket_id = 'payment-proofs' and public.is_admin());
+
+
+-- ─── Card orders paid in crypto (Cards.jsx) ─────────────────────────────────
+-- Needs your cards schema (card_orders) to be installed first.
+do $$ begin
+  if to_regclass('public.card_orders') is not null then
+    alter table public.card_orders add column if not exists pay_coin    text;
+    alter table public.card_orders add column if not exists pay_network text;
+    alter table public.card_orders add column if not exists pay_tx_hash text;
+    alter table public.card_orders add column if not exists proof_url   text;
+  end if;
+end $$;

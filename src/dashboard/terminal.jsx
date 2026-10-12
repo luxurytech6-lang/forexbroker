@@ -1795,7 +1795,7 @@ function Positions({ positions, prices, onClose }) {
               return (
                 <tr key={pos.id}>
                   <td className="mono text-muted" style={{ fontSize:10 }}>{pos.id}</td>
-                  <td style={{ fontWeight:700 }}>{pos.sym}</td>
+                  <td style={{ fontWeight:700 }}>{pos.sym}{pos.approval === 'pending' && <span className="badge" title="Waiting for an admin to approve this trade" style={{ marginLeft:6, background:'rgba(226,174,74,.15)', color:'#E2AE4A' }}>Pending</span>}</td>
                   <td><span className={`badge badge-${pos.type==='BUY'?'green':'red'}`}>{pos.type}</span></td>
                   <td className="mono">{pos.lots}</td>
                   <td className="mono">{pos.open.toFixed(d)}</td>
@@ -1804,7 +1804,7 @@ function Positions({ positions, prices, onClose }) {
                   <td className={`mono ${pos.type==='BUY'?'up':'dn'}`}>{cur.toFixed(d)}</td>
                   <td className={`mono ${pos.pips>=0?'up':'dn'}`}>{pos.pips>=0?'+':''}{pos.pips}</td>
                   <td className={`mono ${pos.pl>=0?'up':'dn'}`} style={{ fontWeight:700 }}>{pos.pl>=0?'+':''}${pos.pl.toFixed(2)}</td>
-                  <td><button className="pos-close-btn" onClick={() => onClose(pos.id)}>✕</button></td>
+                  <td><button className="pos-close-btn" title={pos.approval === 'pending' ? 'Cancel request' : 'Close position'} onClick={() => onClose(pos.id)}>✕</button></td>
                 </tr>
               );
             })}
@@ -2552,6 +2552,7 @@ function MobileTradeScreen({ sym, prices, positions, onPlace, onClosePos, userBa
                       <span className="mob-pos-sym">{pos.sym}</span>
                       <span className={`badge badge-${pos.type==='BUY'?'green':'red'}`}>{pos.type}</span>
                       <span style={{ fontSize:10, color:'var(--nt)' }}>{pos.lots} lots</span>
+                      {pos.approval === 'pending' && <span className="badge" style={{ background:'rgba(226,174,74,.15)', color:'#E2AE4A' }}>Pending</span>}
                     </div>
                     <span className={`mob-pos-pl ${pos.pl>=0?'up':'dn'}`}>{pos.pl>=0?'+':''}${pos.pl.toFixed(2)}</span>
                   </div>
@@ -2560,7 +2561,7 @@ function MobileTradeScreen({ sym, prices, positions, onPlace, onClosePos, userBa
                   {pos.sl ? <div className="mob-pos-row"><span>Stop Loss</span><span className="dn">{pos.sl.toFixed(d)}</span></div> : null}
                   {pos.tp ? <div className="mob-pos-row"><span>Take Profit</span><span className="up">{pos.tp.toFixed(d)}</span></div> : null}
                   <div className="mob-pos-row"><span>Pips</span><span className={pos.pips>=0?'up':'dn'}>{pos.pips>=0?'+':''}{pos.pips}</span></div>
-                  <button className="mob-pos-close" onClick={() => onClosePos(pos.id)}>Close Position</button>
+                  <button className="mob-pos-close" onClick={() => onClosePos(pos.id)}>{pos.approval === 'pending' ? 'Cancel Request' : 'Close Position'}</button>
                 </div>
               );
             })}
@@ -2712,6 +2713,7 @@ export default function Terminal() {
             tp:     r.take_profit ? parseFloat(r.take_profit) : null,
             pl:     parseFloat(r.profit_loss),
             pips:   parseFloat(r.pips),
+            approval: r.approval_status || 'approved',   // 'pending' until an admin approves the trade
           })));
         }
 
@@ -2728,7 +2730,7 @@ export default function Terminal() {
             pl:         parseFloat(r.profit_loss) || 0,
             pips:       parseFloat(r.pips) || 0,
             closedAt:   r.closed_at || r.updated_at || r.created_at,
-            openedAt:   r.created_at,
+            openedAt:   r.opened_at,
           })));
         }
       }
@@ -2824,7 +2826,10 @@ export default function Terminal() {
         order_type:    'market',
       }).select().single();
       if (!error && row) {
-        setPositions(prev => [{ id: row.id, sym: row.symbol, type: row.trade_type, lots: parseFloat(row.lots), open: parseFloat(row.open_price), sl: row.stop_loss ? parseFloat(row.stop_loss) : null, tp: row.take_profit ? parseFloat(row.take_profit) : null, pl: 0, pips: 0 }, ...prev]);
+        setPositions(prev => [{ id: row.id, sym: row.symbol, type: row.trade_type, lots: parseFloat(row.lots), open: parseFloat(row.open_price), sl: row.stop_loss ? parseFloat(row.stop_loss) : null, tp: row.take_profit ? parseFloat(row.take_profit) : null, pl: 0, pips: 0, approval: row.approval_status || 'approved' }, ...prev]);
+        if (row.approval_status === 'pending') {
+          addJournal(`Position #${row.id} sent for approval — it goes live once an admin approves it`);
+        }
       }
     } else {
       setPositions(prev => [{ id: Date.now(), sym: order.sym, type: order.type, lots: order.lots, open: order.open, sl: order.sl, tp: order.tp, pl: 0, pips: 0 }, ...prev]);
@@ -2837,6 +2842,19 @@ export default function Terminal() {
   const handleClosePosition = useCallback(async id => {
     const pos = positions.find(p => p.id === id);
     if (!pos) return;
+
+    // Not approved yet: closing just withdraws the request — no P&L, no wallet change
+    if (pos.approval === 'pending') {
+      setPositions(prev => prev.filter(p => p.id !== id));
+      addJournal(`Cancelled pending position #${id} ${pos.sym}`);
+      if (userId) {
+        const { error: cancelErr } = await supabase.from('open_positions')
+          .update({ status: 'cancelled', closed_at: new Date().toISOString() }).eq('id', id);
+        if (cancelErr) console.error('Failed to cancel pending position:', cancelErr);
+      }
+      return;
+    }
+
     const closePrice = pos.currentPrice || pos.open;
     const closedAt = new Date().toISOString();
     const realizedPL = Number(pos.pl) || 0;

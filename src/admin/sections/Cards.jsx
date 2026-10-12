@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Check, CreditCard as CardIcon, Truck } from 'lucide-react';
+import { Check, X, CreditCard as CardIcon, Truck } from 'lucide-react';
 import {
-  supabase, PageHead, DataTable, Tabs, Pill, UserCell, CrudTable, ApproveModal, Modal, StatusSelect, useRows, useUsers,
+  supabase, PageHead, DataTable, Tabs, Pill, UserCell, CrudTable, ApproveModal, PaymentCell, paidByCrypto, settlePayment, Modal, StatusSelect, useRows, useUsers, useAction,
   walletAdjust, notify, audit, usd, fmtDateTime,
 } from '../adminShared';
 
@@ -23,6 +23,19 @@ export default function CardsAdmin({ refreshCounts }) {
   const txs = useRows('card_transactions');
   const [approving, setApproving] = useState(null);
   const [issuing, setIssuing] = useState(null);
+  const [busy, run] = useAction();
+
+  const reject = (o) => {
+    if (!window.confirm(`Reject this ${o.product} card order${Number(o.fee) > 0 ? ` and its ${usd(o.fee)} payment` : ''}?`)) return;
+    run(o.id, async () => {
+      const { error } = await supabase.from('card_orders').update({ status: 'cancelled' }).eq('id', o.id);
+      if (error) throw error;
+      audit('reject', 'card_orders', o.id, { status: o.status }, { status: 'cancelled' });
+      await settlePayment(o, false);
+      await notify(o.user_id, { title: 'Your card order wasn’t confirmed', description: Number(o.fee) > 0 ? `We couldn’t confirm your ${usd(o.fee)} payment. Contact support if you think this is a mistake.` : 'Contact support if you have questions.', category: 'payment', icon_class: 'ti-circle-x', action_url: '/cards' });
+      orders.reload(); refreshCounts?.();
+    }, 'Order rejected');
+  };
   const [shipping, setShipping] = useState(null);
   const pending = orders.rows.filter(o => o.status === 'pending').length;
   const productName = (k) => products.rows.find(p => p.key === k)?.name || k;
@@ -34,6 +47,7 @@ export default function CardsAdmin({ refreshCounts }) {
     const { error } = await supabase.from('card_orders').update({ status: 'processing' }).eq('id', o.id);
     if (error) throw error;
     audit('approve', 'card_orders', o.id, { status: 'pending' }, { status: 'processing', charged: charge });
+    await settlePayment(o, true);
     await notify(o.user_id, { title: 'Your card order is being processed', description: 'We’ll let you know when it ships.', category: 'payment', icon_class: 'ti-credit-card', action_url: '/cards' });
     orders.reload(); refreshCounts?.();
   };
@@ -61,11 +75,13 @@ export default function CardsAdmin({ refreshCounts }) {
             { key:'product', label:'Card', render:o => <div className="ad-user"><span>{productName(o.product)} · {o.design}</span><small>{o.name_on_card}</small></div> },
             { key:'delivery', label:'Delivery', wrap:true, render:o => <span style={{ fontSize:13.5 }}>{fmtAddress(o.delivery)}{o.tracking_number && <><br /><span className="ad-mono">Tracking {o.tracking_number}</span></>}</span> },
             { key:'fee', label:'Fee', align:'right', render:o => usd(o.fee) },
+            { key:'payment', label:'Payment', render:o => Number(o.fee) > 0 ? <PaymentCell row={o} /> : <span style={{ color:'var(--faint)', fontSize:13 }}>Free</span> },
             { key:'act', label:'Status', align:'right', render:o => (
               <div className="ad-row-actions">
-                {o.status === 'pending' ? (
+                {o.status === 'pending' ? <>
                   <button className="ad-btn ad-btn-ok ad-btn-sm" onClick={() => setApproving(o)}><Check />Approve</button>
-                ) : <>
+                  <button className="ad-btn ad-btn-no ad-btn-sm" disabled={busy === o.id} onClick={() => reject(o)}><X />Reject</button>
+                </> : <>
                   {!o.card_id && o.status !== 'cancelled' && <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={() => setIssuing(o)}><CardIcon />Issue card</button>}
                   {o.status === 'processing' && o.delivery && <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={() => setShipping(o)}><Truck />Ship</button>}
                   <StatusSelect table="card_orders" row={o} options={ORDER_STEPS} onDone={orders.reload} after={onStatus} />
@@ -134,7 +150,15 @@ export default function CardsAdmin({ refreshCounts }) {
 
       {approving && (
         <ApproveModal title="Approve card order" sub={users[approving.user_id]?.email} amount={Number(approving.fee || 0)} defaultCharge={false}
-          chargeLabel="Charge the card fee now (only if it wasn’t paid when ordering)" onClose={() => setApproving(null)} onConfirm={(c) => approve(approving, c)}>
+          chargeLabel={paidByCrypto(approving) ? 'Also charge the user’s wallet (only if the crypto payment didn’t arrive)' : 'Charge the card fee now (only if it wasn’t paid when ordering)'}
+          onClose={() => setApproving(null)} onConfirm={(c) => approve(approving, c)}>
+          {Number(approving.fee) > 0 && (
+            <div className="ad-card" style={{ padding:14, display:'grid', gap:8 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--muted)' }}>Payment</div>
+            <PaymentCell row={approving} />
+            {paidByCrypto(approving) && <small style={{ color:'var(--faint)' }}>Open the screenshot and check your {approving.pay_coin || 'crypto'} wallet received {usd(approving.fee)} before approving.</small>}
+          </div>
+          )}
           <p style={{ color:'var(--muted)' }}>{productName(approving.product)} · {approving.design} · {approving.name_on_card}. The order moves to processing.</p>
         </ApproveModal>
       )}

@@ -1256,6 +1256,7 @@ function ForecastPanel({ marketFilter, settings = DEFAULT_SETTINGS }) {
   const [gauges,   setGauges]   = useState([]);
   const [tableQ3,  setTableQ3]  = useState([]);
   const [tableQ4,  setTableQ4]  = useState([]);
+  const [periods,  setPeriods]  = useState(['', '']);   // the two latest forecast periods, e.g. ['Q3 2026', 'Q4 2026']
 
   useEffect(() => {
     const load = async () => {
@@ -1275,8 +1276,13 @@ function ForecastPanel({ marketFilter, settings = DEFAULT_SETTINGS }) {
       const rows = data || [];
       // Gauge cards: rows with confidence_pct populated (the 3 main forecasts)
       setGauges(rows.filter(r => r.confidence_pct != null));
-      setTableQ3(rows.filter(r => r.period === 'Q3 2026'));
-      setTableQ4(rows.filter(r => r.period === 'Q4 2026'));
+      // Use the two most recent periods in the data instead of fixed quarters
+      const rank = (p) => { const m = /Q([1-4])\s*(\d{4})/i.exec(p || ''); return m ? Number(m[2]) * 10 + Number(m[1]) : 0; };
+      const latest = [...new Set(rows.map(r => r.period).filter(Boolean))].sort((a, b) => rank(a) - rank(b)).slice(-2);
+      const [p1 = '', p2 = ''] = latest.length === 1 ? ['', latest[0]] : latest;
+      setPeriods([p1, p2]);
+      setTableQ3(rows.filter(r => p1 && r.period === p1));
+      setTableQ4(rows.filter(r => p2 && r.period === p2));
     };
     load();
   }, [marketFilter]);
@@ -1362,13 +1368,13 @@ function ForecastPanel({ marketFilter, settings = DEFAULT_SETTINGS }) {
         <div className="fc-table-wrap">
           <div className="fc-table-head">
             <div className="fc-table-title">
-              <em style={{ color: T.g, fontStyle: 'italic' }}>Asset</em> Forecast Table — Q3 / Q4 2026
+              <em style={{ color: T.g, fontStyle: 'italic' }}>Asset</em> Forecast Table{periods.filter(Boolean).length ? ` — ${periods.filter(Boolean).join(' / ')}` : ''}
             </div>
             <a href="#" className="in-btn in-btn-ghost in-btn-sm"><Download size={13} /> Export</a>
           </div>
           <table className="in-table">
             <thead>
-              <tr><th>Asset</th><th>Q3 2026 Range</th><th>Q4 2026 Range</th></tr>
+              <tr><th>Asset</th><th>{periods[0] || '—'} Range</th><th>{periods[1] || '—'} Range</th></tr>
             </thead>
             <tbody>
               {tableRows.map(r => (

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Check, X, LogOut as ExitIcon, HandCoins } from 'lucide-react';
 import {
-  supabase, PageHead, DataTable, Tabs, Chips, Pill, UserCell, CrudTable, ApproveModal, Modal, useRows, useUsers, useAction,
+  supabase, PageHead, DataTable, Tabs, Chips, Pill, UserCell, CrudTable, ApproveModal, PaymentCell, paidByCrypto, settlePayment, Modal, useRows, useUsers, useAction,
   walletAdjust, notify, audit, usd, fmtDate, fmtDateTime,
 } from '../adminShared';
 
@@ -25,6 +25,7 @@ export default function RealEstateAdmin({ refreshCounts }) {
     const { error } = await supabase.from('property_investments').update({ status: 'active' }).eq('id', r.id);
     if (error) throw error;
     audit('approve', 'property_investments', r.id, { status: 'pending' }, { status: 'active', charged: charge });
+    await settlePayment(r, true);
     if (r.properties) {
       await supabase.from('properties').update({
         funded_amount: Number(r.properties.funded_amount || 0) + Number(r.amount),
@@ -40,6 +41,10 @@ export default function RealEstateAdmin({ refreshCounts }) {
     run(r.id, async () => {
       const { error } = await supabase.from('property_investments').update({ status: next }).eq('id', r.id);
       if (error) throw error;
+      if (next === 'rejected') {
+        await settlePayment(r, false);
+        await notify(r.user_id, { title: 'Your property investment wasn’t confirmed', description: `We couldn’t confirm your ${usd(r.amount)} payment for ${r.properties?.name || 'the property'}. Contact support if you think this is a mistake.`, category: 'payment', icon_class: 'ti-circle-x', action_url: '/real-estate' });
+      }
       audit('set_status', 'property_investments', r.id, { status: r.status }, { status: next });
       inv.reload(); refreshCounts?.();
     }, msg);
@@ -68,6 +73,7 @@ export default function RealEstateAdmin({ refreshCounts }) {
             { key:'property', label:'Property', render:r => <div className="ad-user"><span>{r.properties?.name || '—'}</span><small>{r.properties?.city}</small></div> },
             { key:'amount', label:'Amount', align:'right', render:r => usd(r.amount) },
             { key:'shares', label:'Shares', align:'right' },
+            { key:'payment', label:'Payment', render:r => <PaymentCell row={r} /> },
             { key:'status', label:'Status', render:r => <Pill status={r.status} /> },
             { key:'act', label:'', align:'right', render:r => (
               <div className="ad-row-actions">
@@ -124,7 +130,16 @@ export default function RealEstateAdmin({ refreshCounts }) {
 
       {approving && (
         <ApproveModal title="Approve investment" sub={`${users[approving.user_id]?.email || ''} · ${approving.properties?.name || ''}`}
-          amount={Number(approving.amount)} onClose={() => setApproving(null)} onConfirm={(c) => approve(approving, c)} />
+          amount={Number(approving.amount)} defaultCharge={!paidByCrypto(approving)}
+          chargeLabel={paidByCrypto(approving) ? 'Also charge the user’s wallet (only if the crypto payment didn’t arrive)' : 'Charge this to the user’s wallet'}
+          onClose={() => setApproving(null)} onConfirm={(c) => approve(approving, c)}>
+          <div className="ad-card" style={{ padding:14, display:'grid', gap:8 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--muted)' }}>Payment</div>
+            <PaymentCell row={approving} />
+            {paidByCrypto(approving) && <small style={{ color:'var(--faint)' }}>Open the screenshot and check your {approving.pay_coin || 'crypto'} wallet received {usd(approving.amount)} before approving.</small>}
+          </div>
+          <p style={{ color:'var(--muted)' }}>{Number(approving.shares || 0).toLocaleString('en-US')} shares. The investment becomes active and counts towards the property's funding.</p>
+        </ApproveModal>
       )}
       {distributing && <DistributeRent properties={props.rows} onClose={() => setDistributing(false)} onDone={() => { pays.reload(); }} />}
     </>

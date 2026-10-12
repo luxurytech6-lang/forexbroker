@@ -71,6 +71,12 @@ create table if not exists public.mining_contracts (
 create index if not exists mining_contracts_user_idx   on public.mining_contracts(user_id);
 create index if not exists mining_contracts_status_idx on public.mining_contracts(status);
 
+-- ─── Crypto payment details (filled in by the page; checked by an admin) ────
+alter table public.mining_contracts add column if not exists pay_coin    text;   -- e.g. USDT
+alter table public.mining_contracts add column if not exists pay_network text;   -- e.g. TRC-20
+alter table public.mining_contracts add column if not exists pay_tx_hash text;   -- optional, pasted by the user
+alter table public.mining_contracts add column if not exists proof_url   text;   -- path in the private payment-proofs bucket
+
 create table if not exists public.mining_payouts (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references public.users(id) on delete cascade,
