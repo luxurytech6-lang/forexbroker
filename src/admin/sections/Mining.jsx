@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Check, X, Zap, Ban, Flag } from 'lucide-react';
 import {
-  supabase, PageHead, DataTable, Tabs, Chips, Pill, UserCell, CrudTable, ApproveModal, useRows, useUsers, useAction,
+  supabase, PageHead, DataTable, Tabs, Chips, Pill, UserCell, CrudTable, ApproveModal, PaymentCell, paidByCrypto, settlePayment, useRows, useUsers, useAction,
   walletAdjust, notify, audit, isMissingFn, usd, fmtDate, fmtDateTime,
 } from '../adminShared';
 
@@ -59,6 +59,7 @@ export default function MiningAdmin({ refreshCounts }) {
     const { error } = await supabase.from('mining_contracts').update({ status: 'active', started_at: now.toISOString(), ends_at: ends.toISOString(), last_payout_at: now.toISOString() }).eq('id', c.id);
     if (error) throw error;
     audit('approve', 'mining_contracts', c.id, { status: 'pending' }, { status: 'active', charged: charge });
+    await settlePayment(c, true);
     await notify(c.user_id, { title: 'Your mining contract is live', description: `${c.mining_plans?.name || c.coin} has started mining. Earnings are paid daily.`, category: 'payment', icon_class: 'ti-pick', action_url: '/mining' });
     contracts.reload(); refreshCounts?.();
   };
@@ -70,6 +71,7 @@ export default function MiningAdmin({ refreshCounts }) {
       if (error) throw error;
       audit(`set_status`, 'mining_contracts', c.id, { status: c.status }, { status: next });
       if (next === 'cancelled' && c.status === 'pending') {
+        await settlePayment(c, false);
         await notify(c.user_id, { title: 'Your mining contract request was declined', description: 'Contact support if you have questions.', category: 'payment', icon_class: 'ti-circle-x', action_url: '/mining' });
       }
       contracts.reload(); refreshCounts?.();
@@ -108,6 +110,7 @@ export default function MiningAdmin({ refreshCounts }) {
             { key:'user', label:'User', render:c => <UserCell user={users[c.user_id]} id={c.user_id} /> },
             { key:'plan', label:'Plan', render:c => <div className="ad-user"><span>{c.mining_plans?.name || '—'}</span><small>{c.coin} · {Number(c.hashrate || 0)} {c.hashrate_unit}</small></div> },
             { key:'amount', label:'Amount', align:'right', render:c => usd(c.amount) },
+            { key:'payment', label:'Payment', render:c => <PaymentCell row={c} /> },
             { key:'rate', label:'Daily', align:'right', render:c => <span>{Number(c.daily_return_pct)}% · {usd(daily(c))}</span> },
             { key:'term', label:'Term', render:c => c.ends_at ? `${fmtDate(c.started_at)} → ${fmtDate(c.ends_at)}` : `${c.duration_days} days` },
             { key:'total_earned', label:'Paid out', align:'right', render:c => <span className="up">{usd(c.total_earned)}</span> },
@@ -169,8 +172,15 @@ export default function MiningAdmin({ refreshCounts }) {
 
       {approving && (
         <ApproveModal title="Approve mining contract" sub={`${users[approving.user_id]?.email || ''} · ${approving.mining_plans?.name || approving.coin}`}
-          amount={Number(approving.amount)} onClose={() => setApproving(null)}
+          amount={Number(approving.amount)} defaultCharge={!paidByCrypto(approving)}
+          chargeLabel={paidByCrypto(approving) ? 'Also charge the user’s wallet (only if the crypto payment didn’t arrive)' : 'Charge this to the user’s wallet'}
+          onClose={() => setApproving(null)}
           onConfirm={(charge) => activate(approving, charge)}>
+          <div className="ad-card" style={{ padding:14, display:'grid', gap:8 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--muted)' }}>Payment</div>
+            <PaymentCell row={approving} />
+            {paidByCrypto(approving) && <small style={{ color:'var(--faint)' }}>Open the screenshot and check your {approving.pay_coin || 'crypto'} wallet received {usd(approving.amount)} before approving.</small>}
+          </div>
           <p style={{ color:'var(--muted)' }}>The contract starts mining now and runs for {approving.duration_days} days at {approving.daily_return_pct}% a day ({usd(daily(approving))}).</p>
         </ApproveModal>
       )}

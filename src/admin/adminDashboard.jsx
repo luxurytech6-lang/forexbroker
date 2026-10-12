@@ -8,6 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   LayoutDashboard, Users as UsersIcon, ArrowLeftRight, Crown, Pickaxe, Building2, CreditCard,
   Headset, LineChart, Bot, Wallet, Bell, LogOut, Menu, ExternalLink, Loader2, RefreshCw, ScrollText,
+  CandlestickChart, Copy, Users2, Lightbulb,
 } from 'lucide-react';
 import { ADMIN_CSS, supabase, useAdminGuard, adminLogout, ToastProvider, userName, initials } from './adminShared';
 
@@ -19,7 +20,11 @@ import MiningAdmin    from './sections/Mining';
 import RealEstateAdm  from './sections/RealEstate';
 import CardsAdmin     from './sections/Cards';
 import SupportAdmin   from './sections/Support';
-import Traders        from './sections/Traders';
+import HireTrader     from './sections/HireTrader';
+import TerminalAdmin  from './sections/Terminal';
+import StocksAdmin    from './sections/Stocks';
+import CopyTrading    from './sections/CopyTrading';
+import InsightsAdmin  from './sections/Insights';
 import Marketplace    from './sections/Marketplace';
 import CryptoWallets  from './sections/CryptoWallets';
 import Notifications  from './sections/Notifications';
@@ -40,10 +45,16 @@ export const SECTIONS = [
     { key:'mining',        label:'Mining',            Icon:Pickaxe,         Comp:MiningAdmin, count:'mining' },
     { key:'real-estate',   label:'Real estate',       Icon:Building2,       Comp:RealEstateAdm, count:'property' },
     { key:'cards',         label:'Cards',             Icon:CreditCard,      Comp:CardsAdmin, count:'cards' },
-    { key:'traders',       label:'Traders & copying', Icon:LineChart,       Comp:Traders, count:'hire' },
     { key:'marketplace',   label:'Marketplace',       Icon:Bot,             Comp:Marketplace },
   ]},
+  { group:'Trading', items:[
+    { key:'terminal',      label:'Terminal trading',  Icon:CandlestickChart, Comp:TerminalAdmin, count:'terminal' },
+    { key:'stocks',        label:'Stock trading',     Icon:LineChart,       Comp:StocksAdmin, count:'stocks' },
+    { key:'copy-trading',  label:'Copy trading',      Icon:Copy,            Comp:CopyTrading, count:'copy' },
+    { key:'hire',          label:'Hire a trader',     Icon:Users2,          Comp:HireTrader, count:'hire' },
+  ]},
   { group:'Engagement', items:[
+    { key:'insights',      label:'Insights',          Icon:Lightbulb,       Comp:InsightsAdmin },
     { key:'support',       label:'Support tickets',   Icon:Headset,         Comp:SupportAdmin, count:'support' },
     { key:'notifications', label:'Notifications',     Icon:Bell,            Comp:Notifications },
   ]},
@@ -55,12 +66,17 @@ const ALL = SECTIONS.flatMap(g => g.items);
 
 /* Each counter is one cheap HEAD request; missing tables just count as 0 */
 const COUNTERS = {
-  transactions:  () => supabase.from('transactions').select('id', { count:'exact', head:true }).eq('status', 'pending'),
+  // purchases (property, mining, cards, copy trading) are counted in their own sections
+  transactions:  () => supabase.from('transactions').select('id', { count:'exact', head:true }).eq('status', 'pending')
+                        .not('type', 'in', '(property_investment,mining_purchase,card_order,copy_trading)'),
   subscriptions: () => supabase.from('subscription_payment_requests').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   mining:        () => supabase.from('mining_contracts').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   property:      () => supabase.from('property_investments').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   cards:         () => supabase.from('card_orders').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   support:       () => supabase.from('support_tickets').select('id', { count:'exact', head:true }).in('status', ['open', 'pending', 'in_progress']),
+  terminal:      () => supabase.from('open_positions').select('id', { count:'exact', head:true }).eq('status', 'open').eq('approval_status', 'pending'),
+  stocks:        () => supabase.from('stock_orders').select('id', { count:'exact', head:true }).in('status', ['open', 'pending']),
+  copy:          () => supabase.from('copy_relationships').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   hire:          () => supabase.from('hire_requests').select('id', { count:'exact', head:true }).in('status', ['open', 'pending']),
 };
 

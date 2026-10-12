@@ -9,7 +9,10 @@
  *   properties            listings
  *   property_investments  a user's positions
  *   property_payouts      rent paid out to a user
- *   invest_in_property()  RPC that checks the wallet, debits it and records the position
+ *
+ * Paying: the investor pays in crypto to a platform address and attaches a
+ * screenshot (payment/CryptoCheckout.jsx). That files a *pending* investment;
+ * it becomes active once an admin checks the proof (Admin → Real estate).
  *
  * Until the `properties` table exists (or while it's empty) the page shows
  * clearly labelled sample listings and disables investing.
@@ -26,6 +29,7 @@ import {
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 import supabase from "../supabase";
+import CryptoCheckout from "../payment/CryptoCheckout";
 
 /* ─── Page layout + visual system ─────────────────────────────────────────── */
 const GLOBAL_CSS = `
@@ -143,6 +147,7 @@ button { font-family: inherit; color: inherit; }
 .re-status.active { background: var(--green-dim); color: var(--green); }
 .re-status.pending { background: var(--accent-dim); color: var(--accent); }
 .re-status.exited { background: var(--surface2); color: var(--muted); }
+.re-status.rejected { background: rgba(255,100,112,.12); color: var(--red); }
 
 /* How it works */
 .re-how { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; margin-top: 40px; }
@@ -658,11 +663,10 @@ function PropertyCard({ p, i, onOpen }) {
 }
 
 /* ─── Detail drawer with returns calculator and invest flow ───────────────── */
-function PropertyDrawer({ p, seed, isSample, balance, onClose, onInvested }) {
+function PropertyDrawer({ p, seed, isSample, userId, onClose, onInvested }) {
   const min = Number(p.min_investment || 100);
   const [amount, setAmount] = useState(String(Math.max(min, 1000)));
-  const [stage, setStage] = useState('form');       // form | confirm | busy | done
-  const [error, setError] = useState('');
+  const [stage, setStage] = useState('form');       // form | pay | done
   const val = Number(amount) || 0;
   const shares = Math.floor(val / Number(p.share_price || 10));
   const yearly = val * (Number(p.target_yield) / 100);
@@ -682,29 +686,17 @@ function PropertyDrawer({ p, seed, isSample, balance, onClose, onInvested }) {
     isSample ? 'This is a sample listing, so investing is turned off.' :
     pct >= 100 ? 'This property is fully funded.' :
     val < min ? `The minimum investment is ${usd(min)}.` :
-    val > remaining ? `Only ${usd(remaining)} of this property is still available.` :
-    balance != null && val > balance ? `Your wallet balance is ${usd(balance, 2)}. Deposit funds to invest this amount.` : '';
+    val > remaining ? `Only ${usd(remaining)} of this property is still available.` : '';
 
-  const invest = async () => {
-    setStage('busy'); setError('');
-    try {
-      const { error: rpcErr } = await supabase.rpc('invest_in_property', { p_property_id: p.id, p_amount: val });
-      if (rpcErr) {
-        // RPC not installed yet: record a pending request for an admin to approve
-        if (rpcErr.code === 'PGRST202' || /function .* does not exist/i.test(rpcErr.message || '')) {
-          const { data: { session } } = await supabase.auth.getSession();
-          const { error: insErr } = await supabase.from('property_investments').insert({
-            user_id: session?.user?.id, property_id: p.id, amount: val, shares, status: 'pending',
-          });
-          if (insErr) throw insErr;
-        } else throw rpcErr;
-      }
-      setStage('done');
-      onInvested?.();
-    } catch (e) {
-      setError(e?.message || 'Something went wrong. Please try again.');
-      setStage('confirm');
-    }
+  /* Called by CryptoCheckout once the proof is uploaded: file a pending investment */
+  const submitPayment = async (pay) => {
+    const { error: insErr } = await supabase.from('property_investments').insert({
+      user_id: userId, property_id: p.id, amount: val, shares, status: 'pending',
+      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath,
+    });
+    if (insErr) throw insErr;
+    setStage('done');
+    onInvested?.();
   };
 
   return (
@@ -720,10 +712,20 @@ function PropertyDrawer({ p, seed, isSample, balance, onClose, onInvested }) {
           <div className="re-drawer-body">
             <div className="re-success">
               <CheckCircle2 size={48} />
-              <div className="re-drawer-name" style={{ fontSize:30 }}>You're an owner</div>
-              <p className="re-desc">Your investment of <strong style={{ color:'var(--text)' }}>{usd(val)}</strong> in {p.name} has been received. It will appear under My holdings, and rent is paid to your wallet each quarter.</p>
+              <div className="re-drawer-name" style={{ fontSize:30 }}>Payment submitted</div>
+              <p className="re-desc">We've received your <strong style={{ color:'var(--text)' }}>{usd(val)}</strong> payment for {p.name}. Your shares become active once we confirm it, usually within a few hours. You'll find the investment under My holdings, marked pending until then.</p>
               <button className="re-btn re-btn-accent" style={{ marginTop:10 }} onClick={onClose}>Done</button>
             </div>
+          </div>
+        ) : stage === 'pay' ? (
+          <div className="re-drawer-body">
+            <div>
+              <div className="re-loc" style={{ marginBottom:6 }}><MapPin />{p.city}, {p.country}</div>
+              <div className="re-drawer-name" style={{ fontSize:28 }}>Pay for your shares</div>
+              <p className="re-desc" style={{ marginTop:6 }}>{shares.toLocaleString('en-US')} shares in {p.name}. Send the payment, attach a screenshot, and your shares go live once we confirm it.</p>
+            </div>
+            <CryptoCheckout amount={val} label={`${p.name} · ${shares.toLocaleString('en-US')} shares`} userId={userId}
+              context={`property-${p.id}`} onSubmit={submitPayment} onBack={() => setStage('form')} />
           </div>
         ) : (
           <>
@@ -764,25 +766,14 @@ function PropertyDrawer({ p, seed, isSample, balance, onClose, onInvested }) {
                   <div><span>Over {p.hold_years} years</span><strong className="up">+{usd(total)}</strong></div>
                 </div>
                 <p style={{ fontSize:12.5, color:'var(--faint)', marginTop:10 }}>Projections use the target yield and expected growth. They aren't guaranteed, and the value of your shares can fall.</p>
-                {problem && stage !== 'busy' && <div className="re-err">{problem}</div>}
-                {error && <div className="re-err">{error}</div>}
+                {problem && <div className="re-err">{problem}</div>}
               </div>
             </div>
 
             <div className="re-drawer-foot">
-              {stage === 'form' && (
-                <button className="re-btn re-btn-accent" disabled={!!problem} onClick={() => setStage('confirm')}>
-                  <Building2 />Invest {val ? usd(val) : ''}
-                </button>
-              )}
-              {(stage === 'confirm' || stage === 'busy') && (
-                <>
-                  <button className="re-btn re-btn-ghost" style={{ flex:'0 0 auto' }} disabled={stage === 'busy'} onClick={() => setStage('form')}>Back</button>
-                  <button className="re-btn re-btn-accent" disabled={stage === 'busy' || !!problem} onClick={invest}>
-                    {stage === 'busy' ? 'Processing…' : `Confirm ${usd(val)} from wallet`}
-                  </button>
-                </>
-              )}
+              <button className="re-btn re-btn-accent" disabled={!!problem || !userId} onClick={() => setStage('pay')}>
+                <Building2 />Continue to payment{val ? ` · ${usd(val)}` : ''}
+              </button>
             </div>
           </>
         )}
@@ -795,6 +786,7 @@ function PropertyDrawer({ p, seed, isSample, balance, onClose, onInvested }) {
 export default function RealEstate() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser]             = useState(null);
+  const [userId, setUserId]         = useState(null);
   const [balance, setBalance]       = useState(null);
   const [properties, setProperties] = useState(null);   // null = loading
   const [isSample, setIsSample]     = useState(false);
@@ -813,6 +805,7 @@ export default function RealEstate() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { window.location.href = '/login'; return; }
       const uid = session.user.id;
+      setUserId(uid);
 
       const [profileRes, walletRes, settingsRes, propsRes, holdRes, payRes] = await Promise.all([
         supabase.from('users').select('first_name,last_name,email,plan,is_verified,currency').eq('id', uid).maybeSingle(),
@@ -871,7 +864,8 @@ export default function RealEstate() {
     return properties.find(p => p.featured && fundedPct(p) < 100) || null;
   }, [properties]);
 
-  const activeHoldings = holdings.filter(h => h.status !== 'exited');
+  const activeHoldings = holdings.filter(h => h.status === 'active');   // pending = paid, waiting for confirmation
+  const pendingCount = holdings.filter(h => h.status === 'pending').length;
   const invested = activeHoldings.reduce((s, h) => s + Number(h.amount || 0), 0);
   const annualIncome = activeHoldings.reduce((s, h) => s + Number(h.amount || 0) * (Number(h.properties?.target_yield || 0) / 100), 0);
   const ownedCount = new Set(activeHoldings.map(h => h.property_id)).size;
@@ -897,6 +891,12 @@ export default function RealEstate() {
               <a href="/payments" className="re-btn re-btn-ghost"><Wallet />{balance != null ? `Wallet ${usd(balance, 2)}` : 'Deposit funds'}</a>
             </div>
 
+            {pendingCount > 0 && (
+              <div className="re-note">
+                <Info size={18} />
+                <span><strong>{pendingCount} {pendingCount === 1 ? 'payment is' : 'payments are'} being confirmed.</strong> Your shares go live as soon as we've checked the payment.</span>
+              </div>
+            )}
             {isSample && (
               <div className="re-note">
                 <Info size={18} />
@@ -1042,7 +1042,7 @@ export default function RealEstate() {
 
       {open && (
         <PropertyDrawer
-          p={open} seed={seedOf(open)} isSample={isSample || String(open.id).startsWith('sample-')} balance={balance}
+          p={open} seed={seedOf(open)} isSample={isSample || String(open.id).startsWith('sample-')} userId={userId}
           onClose={() => setOpen(null)}
           onInvested={() => setReloadKey(k => k + 1)}
         />

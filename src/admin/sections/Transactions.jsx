@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, X, ArrowRight } from 'lucide-react';
 import {
   supabase, PageHead, DataTable, Tabs, Pill, UserCell, ProofButton, useRows, useUsers, useAction,
-  walletAdjust, notify, audit, usd, fmtDateTime, WITHDRAWALS_DEBIT_ON_REQUEST,
+  walletAdjust, notify, audit, usd, fmtDateTime, WITHDRAWALS_DEBIT_ON_REQUEST, PURCHASE_TYPES,
 } from '../adminShared';
 
 const isDeposit    = (t) => /deposit/i.test(t.type || '');
@@ -32,7 +32,7 @@ async function review(tx, approve) {
   audit(approve ? 'approve' : 'reject', 'transactions', tx.id, { status: tx.status }, { status: approve ? 'completed' : 'rejected' });
 }
 
-export default function Transactions({ refreshCounts }) {
+export default function Transactions({ refreshCounts, go }) {
   const users = useUsers();
   const { rows, loading, error, missing, reload } = useRows('transactions', { limit: 3000 });
   const [tab, setTab] = useState('deposits');
@@ -73,7 +73,12 @@ export default function Transactions({ refreshCounts }) {
     ) },
     { key:'reference', label:'Reference', render:r => { const ref = r.reference || r.invoice_number || ''; return ref ? <span className="ad-mono" title={ref}>{ref.length > 18 ? `${ref.slice(0, 16)}…` : ref}</span> : '—'; } },
     { key:'proof', label:'Proof', render:r => <ProofButton path={r.proof_url} /> },
-    { key:'act', label:'Status', align:'right', render:r => r.status === 'pending' ? (
+    { key:'act', label:'Status', align:'right', render:r => r.status === 'pending' && PURCHASE_TYPES[r.type] ? (
+      // Paid purchases are approved where the purchase lives, which also settles this payment
+      <button className="ad-btn ad-btn-ghost ad-btn-sm" title="Approving it there switches the purchase on and completes this payment" onClick={() => go?.(PURCHASE_TYPES[r.type].section)}>
+        Review in {PURCHASE_TYPES[r.type].label}<ArrowRight />
+      </button>
+    ) : r.status === 'pending' ? (
       <div className="ad-row-actions">
         <button className="ad-btn ad-btn-ok ad-btn-sm" disabled={busy === r.id} onClick={() => act(r, true)}><Check />Approve</button>
         <button className="ad-btn ad-btn-no ad-btn-sm" disabled={busy === r.id} onClick={() => act(r, false)}><X />Reject</button>

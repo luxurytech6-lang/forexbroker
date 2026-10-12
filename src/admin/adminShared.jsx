@@ -598,7 +598,8 @@ export function fmtCell(v) {
 
 /* ─── Forms ───────────────────────────────────────────────────────────────── */
 /**
- * field: { key, label?, type: text|number|bool|select|textarea|json|date|datetime, options?, required?, help?, full?, default? }
+ * field: { key, label?, type: text|number|bool|select|textarea|json|list|date|datetime, options?, required?, help?, full?, default? }
+ * `list` edits a Postgres text[] as comma-separated text.
  */
 export function FieldInput({ f, value, onChange }) {
   const label = f.label || prettyKey(f.key);
@@ -656,12 +657,18 @@ export function inferFields(rows, configured = []) {
 const toFormValue = (f, v) => {
   if (v === null || v === undefined) return f.default ?? (f.type === 'bool' ? false : '');
   if (f.type === 'json') return typeof v === 'string' ? v : JSON.stringify(v, null, 2);
-  if (f.type === 'datetime' && v) return String(v).slice(0, 16);
+  if (f.type === 'list') return Array.isArray(v) ? v.join(', ') : String(v);
+  if (f.type === 'datetime' && v) {
+    // <input type="datetime-local"> wants local time; the database stores UTC
+    const d = new Date(v);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
   if (f.type === 'date' && v) return String(v).slice(0, 10);
   return v;
 };
 const fromFormValue = (f, v) => {
   if (f.type === 'bool') return !!v;
+  if (f.type === 'list') return String(v || '').split(',').map(x => x.trim()).filter(Boolean);
   if (v === '' || v === undefined) return null;
   if (f.type === 'number') return Number(v);
   if (f.type === 'json') { try { return JSON.parse(v); } catch (_) { throw new Error(`${f.label || prettyKey(f.key)} must be valid JSON.`); } }
@@ -709,7 +716,9 @@ export function CrudTable({ table, columns, fields = [], select = '*', order = '
   const { rows, loading, error, missing, reload } = useRows(table, { select, order, asc, build, deps });
   const [editing, setEditing] = useState(null); // null | {} (new) | row
   const [busy, run] = useAction();
-  const allFields = useMemo(() => inferFields(rows, fields).filter(f => !f.hidden), [rows, fields]);
+  // Embedded relations in `select` (e.g. "*, trader_profiles(name)") are not columns of this table
+  const relations = useMemo(() => new Set([...String(select).matchAll(/([a-z_]+)\s*\(/gi)].map(m => m[1])), [select]);
+  const allFields = useMemo(() => inferFields(rows, fields).filter(f => !f.hidden && !relations.has(f.key)), [rows, fields, relations]);
 
   const isEdit = editing && editing[pk] !== undefined;
   const save = async (raw) => {
@@ -764,6 +773,43 @@ export function CrudTable({ table, columns, fields = [], select = '*', order = '
         />
       )}
     </>
+  );
+}
+
+/**
+ * Purchases paid through the crypto checkout also have a pending row in
+ * `transactions` (payment_tx_id). When the purchase is approved or rejected,
+ * mark that payment completed / rejected so the user's history matches.
+ */
+export async function settlePayment(row, approved) {
+  if (!row?.payment_tx_id) return;
+  const status = approved ? 'completed' : 'rejected';
+  const { error } = await supabase.from('transactions')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', row.payment_tx_id).eq('status', 'pending');
+  if (error) console.warn('Could not update the payment transaction:', error.message);
+}
+/* transactions.type → the admin section where that purchase is approved */
+export const PURCHASE_TYPES = {
+  property_investment: { section: 'real-estate',  label: 'Real estate' },
+  mining_purchase:     { section: 'mining',       label: 'Mining' },
+  card_order:          { section: 'cards',        label: 'Cards' },
+  copy_trading:        { section: 'copy-trading', label: 'Copy trading' },
+};
+
+/** How a purchase was paid: crypto details + proof screenshot, or "Wallet" when there's no proof */
+export const paidByCrypto = (row) => !!(row?.proof_url || row?.pay_coin);
+export function PaymentCell({ row }) {
+  if (!paidByCrypto(row)) return <span style={{ color:'var(--faint)', fontSize:13 }}>Wallet / not paid</span>;
+  const tx = row.pay_tx_hash || '';
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+      <div className="ad-user">
+        <span>{row.pay_coin || 'Crypto'}{row.pay_network ? ` · ${row.pay_network}` : ''}</span>
+        <small className="ad-mono" title={tx}>{tx ? `${tx.slice(0, 10)}…${tx.slice(-4)}` : 'no tx hash'}</small>
+      </div>
+      <ProofButton path={row.proof_url} />
+    </div>
   );
 }
 

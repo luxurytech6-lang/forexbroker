@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import supabase from "../../supabase";
 import { sendWelcomeEmail } from "../../email/welcomeEmail";
-import regDocUrl from "../../doc/reg.pdf";
 
 
 const STORAGE_KEY = "tf_lang";
@@ -1167,11 +1166,20 @@ const StepProfile = ({ onNext, onBack }) => {
 /* ─────────────────────────────────────────────
    STEP 4 — Success
 ───────────────────────────────────────────── */
-const StepSuccess = ({ name }) => {
+const StepSuccess = ({ name, emailDone }) => {
   useEffect(() => {
-    const t = setTimeout(() => { window.location.href = "/dashboard"; }, 2500);
-    return () => clearTimeout(t);
-  }, []);
+    // Leaving the page cancels any request still in flight, so wait for the
+    // welcome email to finish (at most 8 s) — and show this screen for at least 2.5 s.
+    let gone = false;
+    const go = () => { if (!gone) { gone = true; window.location.href = "/dashboard"; } };
+    const minWait = new Promise(r => setTimeout(r, 2500));
+    const emailWait = Promise.race([
+      Promise.resolve(emailDone).catch(() => {}),
+      new Promise(r => setTimeout(r, 8000)),
+    ]);
+    Promise.all([minWait, emailWait]).then(go);
+    return () => { gone = true; };
+  }, [emailDone]);
 
   return (
     <div style={{textAlign:"center", padding:"12px 0 8px"}}>
@@ -1628,32 +1636,6 @@ const AuthShell = ({ mode, steps, step, navRight, title, sub, progress, children
 
 
 /* ─────────────────────────────────────────────
-   REGISTRATION DOCUMENT (doc/reg.pdf)
-   Loaded once and sent with the welcome email, both as a
-   base64 attachment and as a public download link.
-───────────────────────────────────────────── */
-const REG_DOC_NAME = "ProfitGainSignal-Registration.pdf";
-
-const loadRegDocument = async () => {
-  const url = new URL(regDocUrl, window.location.origin).href;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(",")[1]); // strip "data:...;base64,"
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    return { filename: REG_DOC_NAME, content: base64, contentType: "application/pdf", url };
-  } catch (err) {
-    console.warn("Could not load registration document, sending link only:", err);
-    return { filename: REG_DOC_NAME, content: null, contentType: "application/pdf", url };
-  }
-};
-
-/* ─────────────────────────────────────────────
    MAIN SIGNUP PAGE
 ───────────────────────────────────────────── */
 const SignUp = () => {
@@ -1669,27 +1651,20 @@ const SignUp = () => {
   const totalSteps = 3;
 
   const goStep2 = (info) => { setData(info); setStep(2); };
-  const goStep3 = ()     => { setStep(3); };
-  const welcomeSent = useRef(false);
-  const goSuccess = ()   => {
-    setStep(4);
-    // Registration is complete: send the welcome email once (never blocks sign-up)
-    if (!welcomeSent.current) {
-      welcomeSent.current = true;
-      loadRegDocument()
-        .then(doc => sendWelcomeEmail({
-          email: data.email,
-          firstName: data.firstName,
-          documentUrl: doc.url,                                   // link to reg.pdf
-          attachments: doc.content ? [{
-            filename: doc.filename,
-            content: doc.content,                                 // base64
-            contentType: doc.contentType,
-          }] : [],
-        }))
-        .catch(err => console.warn("Welcome email failed:", err));
-    }
+
+  // The welcome email is sent by the "send-welcome-email" edge function. A database
+  // trigger fires it as soon as the email is verified; this call is the backup.
+  // It starts right after the code is verified (end of step 2), and the success
+  // screen waits for it before redirecting, so leaving the page can't cut it off.
+  // The function only ever sends once per user, however often it's called.
+  const welcomeEmail = useRef(null);
+  const startWelcomeEmail = () => {
+    if (!welcomeEmail.current) welcomeEmail.current = sendWelcomeEmail();
+    return welcomeEmail.current;
   };
+
+  const goStep3 = ()     => { setStep(3); startWelcomeEmail(); };
+  const goSuccess = ()   => { startWelcomeEmail(); setStep(4); };
   const goBack    = ()   => { setStep(s => s - 1); };
 
   const stepLabel = { 1:"Your details", 2:"Verify email", 3:"Preferences", 4:"All set" };
@@ -1714,7 +1689,7 @@ const SignUp = () => {
         {step === 1 && <StepAccount onNext={goStep2} />}
         {step === 2 && <StepOTP email={data.email} onNext={goStep3} onBack={goBack} />}
         {step === 3 && <StepProfile onNext={goSuccess} onBack={goBack} />}
-        {step === 4 && <StepSuccess name={data.firstName || "Trader"} />}
+        {step === 4 && <StepSuccess name={data.firstName || "Trader"} emailDone={welcomeEmail.current} />}
       </AuthShell>
     </>
   );

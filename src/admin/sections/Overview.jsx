@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Wallet, ArrowDownToLine, ArrowUpFromLine, Crown, Pickaxe, Building2, Headset, CreditCard, LineChart } from 'lucide-react';
+import { Users, Wallet, ArrowDownToLine, ArrowUpFromLine, Crown, Pickaxe, Building2, Headset, CreditCard, LineChart, CandlestickChart } from 'lucide-react';
 import { supabase, PageHead, DataTable, Pill, UserCell, useUsers, usd, fmtDateTime } from '../adminShared';
 
 const headCount = (q) => q.then(r => (r.error ? null : r.count ?? 0)).catch(() => null);
@@ -44,7 +44,9 @@ export default function Overview({ counts, go }) {
     { Icon:Building2,       lbl:'Property investments to review', val:v(counts.property ?? 0), sub:'Pending approval', to:'real-estate', alert: counts.property > 0 },
     { Icon:Headset,         lbl:'Open support tickets', val:v(counts.support ?? 0), sub:'Waiting on the team', to:'support', alert: counts.support > 0 },
     { Icon:CreditCard,      lbl:'Card orders to review', val:v(counts.cards ?? 0), sub:'Pending', to:'cards', alert: counts.cards > 0 },
-    { Icon:LineChart,       lbl:'Open hire requests', val:v(counts.hire ?? 0), sub:'Clients looking for a trader', to:'traders', alert: counts.hire > 0 },
+    { Icon:CandlestickChart, lbl:'Terminal trades to approve', val:v(counts.terminal ?? 0), sub:'Waiting before they go live', to:'terminal', alert: counts.terminal > 0 },
+    { Icon:LineChart,       lbl:'Stock orders waiting', val:v(counts.stocks ?? 0), sub:'Limit orders to fill or cancel', to:'stocks', alert: counts.stocks > 0 },
+    { Icon:Users,           lbl:'Open hire requests', val:v(counts.hire ?? 0), sub:'Clients looking for a trader', to:'hire', alert: counts.hire > 0 },
   ];
 
   return (
