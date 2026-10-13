@@ -2052,6 +2052,8 @@ const NAV_GROUPS = [
     { href:'/hire-trader',  icon:'ti-users',            label:'Hire a Trader' },
     { href:'/real-estate',  icon:'ti-building',         label:'Real Estate', badge:'NEW' },
     { href:'/mining',       icon:'ti-pick',             label:'Mining',      badge:'NEW' },
+    { href:'/staking',      icon:'ti-stack-2',          label:'Staking',     badge:'NEW' },
+    { href:'/swap',         icon:'ti-arrows-exchange',  label:'Swap',        badge:'NEW' },
     { href:'/terminal',     icon:'ti-chart-candle',     label:'Terminal', active:true },
   ]},
   { title:'Discover', links:[
@@ -2064,6 +2066,7 @@ const ACCOUNT_LINKS = [
   { href:'/payments', icon:'ti-credit-card', label:'Payments' },
   { href:'/cards',    icon:'ti-cards',       label:'Cards' },
   { href:'/profile',  icon:'ti-user-circle', label:'Profile'  },
+  { href:'/verify-identity', icon:'ti-shield-check', label:'Verify identity' },
   { href:'/settings', icon:'ti-settings',    label:'Settings' },
   { href:'/support',  icon:'ti-headset',     label:'Support'  },
 ];
@@ -2599,6 +2602,7 @@ function MobileSettingsScreen({ session, onConnectClick, onDisconnect, userBalan
     : '??';
   const links = [
     { icon:'ti-user-circle', label:'Profile',  href:'/profile' },
+    { icon:'ti-shield-check', label:'Verify identity', href:'/verify-identity' },
     { icon:'ti-credit-card', label:'Payments', href:'/payments' },
     { icon:'ti-cards', label:'Cards', href:'/cards' },
     { icon:'ti-settings',    label:'Settings', href:'/settings' },

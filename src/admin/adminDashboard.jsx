@@ -8,12 +8,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   LayoutDashboard, Users as UsersIcon, ArrowLeftRight, Crown, Pickaxe, Building2, CreditCard,
   Headset, LineChart, Bot, Wallet, Bell, LogOut, Menu, ExternalLink, Loader2, RefreshCw, ScrollText,
-  CandlestickChart, Copy, Users2, Lightbulb,
+  CandlestickChart, Copy, Users2, Lightbulb, BadgeCheck, Plug, Layers, Repeat,
 } from 'lucide-react';
 import { ADMIN_CSS, supabase, useAdminGuard, adminLogout, ToastProvider, userName, initials } from './adminShared';
 
 import Overview       from './sections/Overview';
 import UsersSection   from './sections/Users';
+import IdentityAdmin  from './sections/Identity';
+import ConnectionsAdm from './sections/Connections';
+import StakingAdmin   from './sections/Staking';
+import SwapAdmin      from './sections/Swap';
 import Transactions   from './sections/Transactions';
 import Subscriptions  from './sections/Subscriptions';
 import MiningAdmin    from './sections/Mining';
@@ -37,12 +41,16 @@ export const SECTIONS = [
   ]},
   { group:'People & money', items:[
     { key:'users',         label:'Users',             Icon:UsersIcon,       Comp:UsersSection },
+    { key:'identity',      label:'Identity checks',   Icon:BadgeCheck,      Comp:IdentityAdmin, count:'identity' },
+    { key:'connections',   label:'Connections',       Icon:Plug,            Comp:ConnectionsAdm, count:'connections' },
     { key:'transactions',  label:'Transactions',      Icon:ArrowLeftRight, Comp:Transactions, count:'transactions' },
     { key:'subscriptions', label:'Subscriptions',     Icon:Crown,           Comp:Subscriptions, count:'subscriptions' },
     { key:'wallets',       label:'Deposit addresses', Icon:Wallet,          Comp:CryptoWallets },
   ]},
   { group:'Products', items:[
     { key:'mining',        label:'Mining',            Icon:Pickaxe,         Comp:MiningAdmin, count:'mining' },
+    { key:'staking',       label:'Staking',           Icon:Layers,          Comp:StakingAdmin, count:'staking' },
+    { key:'swap',          label:'Swap',              Icon:Repeat,          Comp:SwapAdmin },
     { key:'real-estate',   label:'Real estate',       Icon:Building2,       Comp:RealEstateAdm, count:'property' },
     { key:'cards',         label:'Cards',             Icon:CreditCard,      Comp:CardsAdmin, count:'cards' },
     { key:'marketplace',   label:'Marketplace',       Icon:Bot,             Comp:Marketplace },
@@ -67,9 +75,12 @@ const ALL = SECTIONS.flatMap(g => g.items);
 /* Each counter is one cheap HEAD request; missing tables just count as 0 */
 const COUNTERS = {
   // purchases (property, mining, cards, copy trading) are counted in their own sections
-  transactions:  () => supabase.from('transactions').select('id', { count:'exact', head:true }).eq('status', 'pending')
-                        .not('type', 'in', '(property_investment,mining_purchase,card_order,copy_trading)'),
+  transactions:  () => supabase.from('transactions').select('id', { count:'exact', head:true }).in('status', ['pending', 'Pending', 'PENDING', 'processing', 'awaiting', 'under_review'])
+                        .not('type', 'in', '(property_investment,mining_purchase,card_order,copy_trading,staking_purchase)'),
+  connections:   () => supabase.from('users').select('id', { count:'exact', head:true }).eq('connection_status', 'pending'),
+  identity:      () => supabase.from('identity_verifications').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   subscriptions: () => supabase.from('subscription_payment_requests').select('id', { count:'exact', head:true }).eq('status', 'pending'),
+  staking:       () => supabase.from('stakes').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   mining:        () => supabase.from('mining_contracts').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   property:      () => supabase.from('property_investments').select('id', { count:'exact', head:true }).eq('status', 'pending'),
   cards:         () => supabase.from('card_orders').select('id', { count:'exact', head:true }).eq('status', 'pending'),

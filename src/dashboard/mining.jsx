@@ -26,8 +26,8 @@ import {
 } from "lucide-react";
 import {
   LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers,
-  Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
-  CreditCard as DkCard, UserCircle as DkUser, Settings as DkSettings, Headset as DkHeadset,
+  Building2 as DkBuilding, Pickaxe as DkPickaxe, Layers as DkLayers, Repeat as DkRepeat, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
+  CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset,
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 import supabase from "../supabase";
@@ -238,6 +238,8 @@ const DK_NAV = [
     { key:'hire',      href:'/hire-trader',  Icon:DkUsers,     label:'Hire a Trader' },
     { key:'realestate',href:'/real-estate',  Icon:DkBuilding,  label:'Real Estate', badge:'NEW' },
     { key:'mining',    href:'/mining',       Icon:DkPickaxe,   label:'Mining',      badge:'NEW' },
+    { key:'staking',   href:'/staking',      Icon:DkLayers,    label:'Staking',     badge:'NEW' },
+    { key:'swap',      href:'/swap',         Icon:DkRepeat,    label:'Swap',        badge:'NEW' },
     { key:'terminal',  href:'/terminal',     Icon:DkCandle,    label:'Terminal' },
   ]},
   { title:'Discover', links:[
@@ -248,6 +250,7 @@ const DK_NAV = [
     { key:'payments',  href:'/payments',     Icon:DkCard,      label:'Payments' },
     { key:'cards',     href:'/cards',        Icon:DkCards,     label:'Cards' },
     { key:'profile',   href:'/profile',      Icon:DkUser,      label:'Profile' },
+    { key:'identity',  href:'/verify-identity', Icon:DkShield,  label:'Verify identity' },
     { key:'settings',  href:'/settings',     Icon:DkSettings,  label:'Settings' },
     { key:'support',   href:'/support',      Icon:DkHeadset,   label:'Support' },
   ]},
@@ -610,7 +613,8 @@ function PlanDrawer({ p, isSample, userId, onClose, onBought }) {
   const min = Number(p.min_investment || 100);
   const max = Number(p.max_investment || 0) || 100000;
   const [amount, setAmount] = useState(String(min));
-  const [stage, setStage]   = useState('form');   // form | pay | done
+  const [stage, setStage]   = useState('form');   // form | done
+  const [paying, setPaying] = useState(false);    // payment modal open
   const val     = Number(amount) || 0;
   const daily   = val * Number(p.daily_return_pct) / 100;
   const total   = daily * Number(p.duration_days);
@@ -628,15 +632,16 @@ function PlanDrawer({ p, isSample, userId, onClose, onBought }) {
     val < min ? `The minimum for this plan is ${usd(min, 0)}.` :
     val > max ? `The maximum for this plan is ${usd(max, 0)}.` : '';
 
-  /* Called by CryptoCheckout once the proof is uploaded: file a pending contract */
+  /* Called by the payment modal once the proof is uploaded: file a pending contract */
   const submitPayment = async (pay) => {
     const { error: insErr } = await supabase.from('mining_contracts').insert({
       user_id: userId, plan_id: p.id, coin: p.coin, amount: val,
       daily_return_pct: p.daily_return_pct, duration_days: p.duration_days,
       hashrate: Number(hash.toFixed(4)), hashrate_unit: p.hashrate_unit, status: 'pending',
-      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath,
+      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath, payment_tx_id: pay.transactionId,
     });
     if (insErr) throw insErr;
+    setPaying(false);
     setStage('done');
     onBought?.();
   };
@@ -662,12 +667,6 @@ function PlanDrawer({ p, isSample, userId, onClose, onBought }) {
               <p className="mn-desc">We've received your {usd(val)} payment for {p.name}. Your contract starts mining as soon as we confirm it, usually within a few hours, and then pays out every day for {p.duration_days} days.</p>
               <button className="re-btn re-btn-accent" style={{ marginTop:10 }} onClick={onClose}>Done</button>
             </div>
-          </div>
-        ) : stage === 'pay' ? (
-          <div className="mn-drawer-body">
-            <p className="mn-desc">Send the payment and attach a screenshot. Your {hash.toLocaleString('en-US', { maximumFractionDigits:2 })} {p.hashrate_unit} contract starts once we confirm it.</p>
-            <CryptoCheckout amount={val} label={`${p.name} · ${p.duration_days}-day contract`} userId={userId}
-              context={`mining-${p.id}`} onSubmit={submitPayment} onBack={() => setStage('form')} />
           </div>
         ) : (
           <>
@@ -702,11 +701,24 @@ function PlanDrawer({ p, isSample, userId, onClose, onBought }) {
               </div>
             </div>
             <div className="mn-drawer-foot">
-              <button className="re-btn re-btn-accent" disabled={!!problem || !userId} onClick={() => setStage('pay')}><Pickaxe />Continue to payment{val ? ` · ${usd(val, 0)}` : ''}</button>
+              <button className="re-btn re-btn-accent" disabled={!!problem || !userId} onClick={() => setPaying(true)}><Pickaxe />Buy {usd(val, 0)} contract</button>
             </div>
           </>
         )}
       </aside>
+      {paying && (
+        <CryptoCheckout
+          title="Mining contract payment"
+          amount={val}
+          label={`${p.name} · ${p.duration_days}-day contract`}
+          confirmLabel="Confirm mining payment"
+          userId={userId}
+          context={`mining-${p.id}`}
+          transaction={{ type: 'mining_purchase', description: `Mining contract: ${p.name} (${p.duration_days} days)` }}
+          onSubmit={submitPayment}
+          onClose={() => setPaying(false)}
+        />
+      )}
     </>
   );
 }

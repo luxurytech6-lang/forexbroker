@@ -1,25 +1,22 @@
 /**
- * CryptoCheckout.jsx
+ * CryptoCheckout.jsx — the payment modal
  * ─────────────────────────────────────────────────────────────────────────────
- * The "pay with crypto" step used for real estate, mining, card orders and
- * copy trading. It follows the plan-payment flow on the Payments page:
+ * Pops up when the user clicks the main action (Start copying, Invest, Buy
+ * contract, Order card). It shows:
  *
- *   pick a coin → send to the platform address (QR or copy) → paste the tx hash
- *   (optional) → attach a screenshot (required) → "I've sent the payment"
+ *   1. the amount the user entered
+ *   2. the wallet address to send it to (with Copy)
+ *   3. a place to upload the payment proof
+ *   4. a "Confirm … payment" button
  *
- * The screenshot is uploaded to the private `payment-proofs` bucket, then
- * `onSubmit(payment)` is called so the page can record the pending purchase.
- * Like the Marketplace checkout, the payment is also written to `transactions`
- * as a *pending* row with the proof (pass the `transaction` prop), so it shows
- * in the user's payment history and in Admin → Transactions. Its id is handed
- * to onSubmit as `transactionId` so the purchase can point at it.
+ * On confirm the proof is uploaded to the private `payment-proofs` bucket,
+ * `onSubmit(payment)` records the pending purchase, and the payment is written
+ * to `transactions` as a pending row with the proof (Marketplace style).
  * Nothing is activated here — an admin checks the proof and approves it.
- *
- * Renders inline (no overlay of its own), so it drops into any drawer or modal.
- * Styling uses the CSS variables every dashboard page already defines.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, Check, QrCode, Upload, X, AlertTriangle, AlertCircle, Loader2, CheckCheck, ShieldCheck } from 'lucide-react';
+import { Copy, Check, Upload, X, AlertTriangle, AlertCircle, Loader2, ShieldCheck, Wallet } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import supabase from '../supabase';
 
 export const PAYMENT_PROOF_BUCKET = 'payment-proofs';
@@ -28,7 +25,7 @@ const PROOF_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
 
 /** Uploads a proof screenshot and returns its storage path (the bucket is private). */
 export async function uploadPaymentProof(file, userId, context = 'payment') {
-  if (!file) throw new Error('Attach a screenshot of your payment first.');
+  if (!file) throw new Error('Upload your payment proof first.');
   if (!PROOF_TYPES.includes(file.type)) throw new Error('Only JPG or PNG images are accepted as payment proof.');
   if (file.size > MAX_PROOF_MB * 1024 * 1024) throw new Error(`Payment proof must be smaller than ${MAX_PROOF_MB}MB.`);
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
@@ -59,69 +56,65 @@ export function useCryptoWallets() {
 }
 
 const CSS = `
-.cc { display: flex; flex-direction: column; gap: 16px; }
-.cc-lbl { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
-.cc-lbl em { font-style: normal; font-weight: 400; color: var(--faint); }
-.cc-amount { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--border); }
-.cc-amount span { display: block; font-size: 12.5px; color: var(--muted); }
-.cc-amount strong { font-size: 24px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
-.cc-net { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 6px; background: var(--accent-dim); color: var(--accent); white-space: nowrap; }
-.cc-coins { display: flex; flex-wrap: wrap; gap: 8px; }
-.cc-coin { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
-.cc-coin i { width: 10px; height: 10px; border-radius: 50%; }
-.cc-coin:hover { border-color: var(--border2); }
-.cc-coin.sel { border-color: var(--accent); background: var(--accent-dim); }
-.cc-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); }
-.cc-tab { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; border: none; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-.cc-tab.on { background: var(--accent); color: #07101E; }
-.cc-qr { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 0; text-align: center; font-size: 13px; color: var(--muted); }
-.cc-qr img { width: 168px; height: 168px; padding: 8px; border-radius: 12px; background: #fff; }
-.cc-addr { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); }
-.cc-addr code { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text); word-break: break-all; font-family: ui-monospace, Menlo, monospace; }
-.cc-copy { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border-radius: 8px; border: none; background: var(--accent-dim); color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
-.cc-warn { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.22); color: #f59e0b; font-size: 12.5px; line-height: 1.5; }
-.cc-warn svg { flex-shrink: 0; margin-top: 1px; }
-.cc-input { width: 100%; height: 42px; padding: 0 12px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; outline: none; }
-.cc-input:focus { border-color: var(--accent); }
-.cc-drop { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 14px; border-radius: 10px; border: 1px dashed var(--border2); background: var(--surface2); color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
-.cc-drop:hover { border-color: var(--accent); color: var(--text); }
-.cc-file { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); font-size: 13px; }
-.cc-file img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
-.cc-file span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cc-file button { background: none; border: none; color: var(--muted); cursor: pointer; display: flex; }
-.cc-err { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: rgba(255,100,112,.08); border: 1px solid rgba(255,100,112,.25); color: var(--red, #FF6470); font-size: 13px; }
-.cc-actions { display: flex; gap: 10px; }
-.cc-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; border-radius: 12px; border: 1px solid transparent; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
-.cc-btn-accent { background: var(--accent); color: #07101E; }
-.cc-btn-accent:disabled { opacity: .45; cursor: not-allowed; }
-.cc-btn-ghost { flex: 0 0 auto; padding: 0 18px; background: transparent; border-color: var(--border2); color: var(--text); }
-.cc-secure { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--faint); }
-.cc-spin { animation: ccSpin .8s linear infinite; }
-@keyframes ccSpin { to { transform: rotate(360deg); } }
+.pm-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(3,8,18,.72); backdrop-filter: blur(4px); animation: pmFade .15s ease; }
+.pm { width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 22px; border-radius: 18px; background: var(--surface, #0E1729); border: 1px solid var(--border2, rgba(255,255,255,.12)); color: var(--text, #E8EDF5); box-shadow: 0 24px 60px rgba(0,0,0,.5); animation: pmUp .18s ease; }
+.pm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pm-head h3 { margin: 0; font-size: 17px; font-weight: 700; }
+.pm-x { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--border, rgba(255,255,255,.08)); background: transparent; color: var(--muted, #94A3B8); cursor: pointer; }
+.pm-x:hover { color: var(--text, #fff); }
+.pm-lbl { font-size: 12.5px; font-weight: 600; color: var(--muted, #94A3B8); margin-bottom: 8px; }
+.pm-amount { padding: 14px 16px; border-radius: 12px; background: var(--surface2, rgba(255,255,255,.04)); border: 1px solid var(--border, rgba(255,255,255,.08)); }
+.pm-amount span { display: block; font-size: 12.5px; color: var(--muted, #94A3B8); }
+.pm-amount strong { display: block; margin-top: 2px; font-size: 28px; font-weight: 700; color: var(--accent, #E2AE4A); font-variant-numeric: tabular-nums; }
+.pm-coins { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.pm-coin { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 11px; border-radius: 9px; border: 1px solid var(--border, rgba(255,255,255,.08)); background: transparent; color: var(--text, #fff); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.pm-coin i { width: 9px; height: 9px; border-radius: 50%; }
+.pm-coin.sel { border-color: var(--accent, #E2AE4A); background: var(--accent-dim, rgba(226,174,74,.12)); }
+.pm-addr { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--surface2, rgba(255,255,255,.04)); border: 1px solid var(--border, rgba(255,255,255,.08)); }
+.pm-addr code { flex: 1; min-width: 0; font-size: 12.5px; word-break: break-all; font-family: ui-monospace, Menlo, monospace; }
+.pm-copy { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border-radius: 8px; border: none; background: var(--accent-dim, rgba(226,174,74,.12)); color: var(--accent, #E2AE4A); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+.pm-warn { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; font-size: 12px; line-height: 1.5; color: #f59e0b; }
+.pm-warn svg { flex-shrink: 0; margin-top: 2px; }
+.pm-drop { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 14px; border-radius: 10px; border: 1px dashed var(--border2, rgba(255,255,255,.16)); background: var(--surface2, rgba(255,255,255,.04)); color: var(--muted, #94A3B8); font: inherit; font-size: 13px; cursor: pointer; text-align: center; }
+.pm-drop:hover { border-color: var(--accent, #E2AE4A); color: var(--text, #fff); }
+.pm-file { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, rgba(255,255,255,.08)); background: var(--surface2, rgba(255,255,255,.04)); font-size: 13px; }
+.pm-file img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; }
+.pm-file span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-file button { background: none; border: none; color: var(--muted, #94A3B8); cursor: pointer; display: flex; }
+.pm-err { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: rgba(255,100,112,.08); border: 1px solid rgba(255,100,112,.25); color: var(--red, #FF6470); font-size: 13px; }
+.pm-go { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 50px; border-radius: 12px; border: none; background: var(--accent, #E2AE4A); color: #07101E; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.pm-go:disabled { opacity: .45; cursor: not-allowed; }
+.pm-note { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--faint, #64748B); text-align: center; }
+.pm-spin { animation: pmSpin .8s linear infinite; }
+@keyframes pmSpin { to { transform: rotate(360deg); } }
+@keyframes pmFade { from { opacity: 0; } }
+@keyframes pmUp { from { opacity: 0; transform: translateY(12px); } }
+@media (max-width: 560px) {
+  .pm-overlay { align-items: flex-end; padding: 0; }
+  .pm { max-width: none; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }
+}
 `;
 
 const usd = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-/**
- * props
- *   amount     number (USD) to pay
- *   label      what is being paid for, shown above the amount
- *   userId     signed-in user's id (proof is stored under it)
- *   context    short tag for the proof file name, e.g. "mining-<planId>"
- *   onSubmit   async ({ coin, network, address, txHash, proofPath, amount, transactionId }) => void — record the pending purchase; throw to show an error
- *   transaction optional { type, description } — also record the payment in `transactions` (pending)
- *   onBack     optional; shows a Back button
- *   submitLabel optional button text
- */
 const newId = () => (window.crypto?.randomUUID?.() ||
   'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }));
 
-export default function CryptoCheckout({ amount, label, userId, context = 'payment', onSubmit, onBack, submitLabel = "I've sent the payment", transaction }) {
+/**
+ * props
+ *   title        modal heading, e.g. "Copy trading payment"
+ *   amount       number (USD) the user entered
+ *   label        what it's for, shown above the amount
+ *   confirmLabel button text, e.g. "Confirm copy trading payment"
+ *   userId       signed-in user's id (proof is stored under it)
+ *   context      short tag for the proof file name
+ *   onSubmit     async ({ coin, network, address, txHash, proofPath, amount, transactionId }) => void; throw to show an error
+ *   onClose      closes the modal
+ *   transaction  optional { type, description } — also record the payment in `transactions` (pending)
+ */
+export default function CryptoCheckout({ title = 'Payment', amount, label = 'Amount', confirmLabel = 'Confirm payment', userId, context = 'payment', onSubmit, onClose, transaction }) {
   const { coins, error: loadErr } = useCryptoWallets();
   const [coinId, setCoinId] = useState(null);
-  const [view, setView] = useState('qr');
   const [copied, setCopied] = useState(false);
-  const [txHash, setTxHash] = useState('');
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -130,6 +123,16 @@ export default function CryptoCheckout({ amount, label, userId, context = 'payme
 
   const coin = useMemo(() => (coins || []).find(c => c.id === coinId) || (coins || [])[0] || null, [coins, coinId]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
+  // Escape closes; lock page scroll while open
+  useEffect(() => {
+    // Capture on window so Escape closes only this modal, not the drawer underneath
+    const onKey = (e) => { if (e.key !== 'Escape') return; e.stopPropagation(); if (!busy) onClose?.(); };
+    window.addEventListener('keydown', onKey, true);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey, true); document.body.style.overflow = prev; };
+  }, [busy, onClose]);
 
   const pick = (e) => {
     const f = e.target.files?.[0];
@@ -149,25 +152,16 @@ export default function CryptoCheckout({ amount, label, userId, context = 'payme
     try {
       const proofPath = await uploadPaymentProof(file, userId, context);
       const transactionId = transaction ? newId() : null;
-      const hash = txHash.trim() || null;
       // 1. the purchase itself (pending) — the page decides what that is
-      await onSubmit({ coin: coin.symbol, network: coin.network, address: coin.address, txHash: hash, proofPath, amount: Number(amount), transactionId });
+      await onSubmit({ coin: coin.symbol, network: coin.network, address: coin.address, txHash: null, proofPath, amount: Number(amount), transactionId });
       // 2. the payment, in transactions, exactly like the Marketplace checkout
       if (transaction) {
         const { error: txErr } = await supabase.from('transactions').insert({
-          id:          transactionId,
-          user_id:     userId,
-          type:        transaction.type,
-          amount:      -Number(amount),
-          fee:         0,
-          net_amount:  -Number(amount),
-          currency:    'USD',
+          id: transactionId, user_id: userId, type: transaction.type,
+          amount: -Number(amount), fee: 0, net_amount: -Number(amount), currency: 'USD',
           description: `${transaction.description} — paid in ${coin.symbol}${coin.network ? ` (${coin.network})` : ''}, awaiting confirmation`,
-          status:      'pending',
-          reference:   hash,
-          proof_url:   proofPath,
+          status: 'pending', reference: null, proof_url: proofPath,
         });
-        // The purchase is already filed with its proof, so don't fail the checkout over this
         if (txErr) console.warn('Payment saved on the purchase, but not in transactions:', txErr.message);
       }
     } catch (e) {
@@ -176,88 +170,69 @@ export default function CryptoCheckout({ amount, label, userId, context = 'payme
     }
   };
 
-  return (
-    <div className="cc">
+  // Portal to <body> so a transformed parent (drawer, modal) can't trap the fixed overlay
+  return createPortal(
+    <div className="pm-overlay" onClick={e => e.stopPropagation()} onMouseDown={e => { if (e.target === e.currentTarget && !busy) onClose?.(); }}>
       <style>{CSS}</style>
+      <div className="pm" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="pm-head">
+          <h3>{title}</h3>
+          <button type="button" className="pm-x" onClick={onClose} disabled={busy} aria-label="Close"><X size={16} /></button>
+        </div>
 
-      <div className="cc-amount">
-        <div><span>{label}</span><strong>{usd(amount)}</strong></div>
-        {coin?.network && <span className="cc-net">{coin.network}</span>}
-      </div>
+        <div className="pm-amount"><span>{label}</span><strong>{usd(amount)}</strong></div>
 
-      {coins === null ? (
-        <div className="cc-secure"><Loader2 size={16} className="cc-spin" />Loading payment options…</div>
-      ) : !coins.length ? (
-        <div className="cc-err"><AlertCircle size={16} />{loadErr || 'Crypto payments aren’t set up yet. Please contact support.'}</div>
-      ) : (
-        <>
-          <div>
-            <div className="cc-lbl">Pay with</div>
-            <div className="cc-coins" role="radiogroup" aria-label="Coin">
-              {coins.map(c => (
-                <button key={c.id} type="button" role="radio" aria-checked={coin?.id === c.id} className={`cc-coin${coin?.id === c.id ? ' sel' : ''}`} onClick={() => setCoinId(c.id)}>
-                  <i style={{ background: c.color }} />{c.symbol}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="cc-tabs">
-              <button type="button" className={`cc-tab${view === 'qr' ? ' on' : ''}`} onClick={() => setView('qr')}><QrCode size={15} />Scan QR</button>
-              <button type="button" className={`cc-tab${view === 'address' ? ' on' : ''}`} onClick={() => setView('address')}><Copy size={15} />Copy address</button>
-            </div>
-          </div>
-
-          {view === 'qr' ? (
-            <div className="cc-qr">
-              <img alt={`QR code for the ${coin.symbol} address`} src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data=${encodeURIComponent(coin.address)}`} onError={() => setView('address')} />
-              <div>Scan with your wallet app · <strong style={{ color: 'var(--text)' }}>{coin.name} ({coin.symbol})</strong></div>
-            </div>
-          ) : (
+        {coins === null ? (
+          <div className="pm-note"><Loader2 size={16} className="pm-spin" />Loading wallet address…</div>
+        ) : !coins.length ? (
+          <div className="pm-err"><AlertCircle size={16} style={{ flexShrink: 0 }} />{loadErr || 'Crypto payments aren’t set up yet. Please contact support.'}</div>
+        ) : (
+          <>
             <div>
-              <div className="cc-lbl">{coin.name} ({coin.symbol}) address</div>
-              <div className="cc-addr">
+              <div className="pm-lbl">Send {usd(amount)} to this wallet address</div>
+              {coins.length > 1 && (
+                <div className="pm-coins" role="radiogroup" aria-label="Coin">
+                  {coins.map(c => (
+                    <button key={c.id} type="button" role="radio" aria-checked={coin?.id === c.id} className={`pm-coin${coin?.id === c.id ? ' sel' : ''}`} onClick={() => setCoinId(c.id)}>
+                      <i style={{ background: c.color }} />{c.symbol}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="pm-addr">
+                <Wallet size={16} style={{ flexShrink: 0, color: 'var(--muted, #94A3B8)' }} />
                 <code>{coin.address}</code>
-                <button type="button" className="cc-copy" onClick={copy}>{copied ? <><Check size={14} />Copied</> : <><Copy size={14} />Copy</>}</button>
+                <button type="button" className="pm-copy" onClick={copy}>{copied ? <><Check size={14} />Copied</> : <><Copy size={14} />Copy</>}</button>
               </div>
+              <div className="pm-warn"><AlertTriangle size={14} /><span>{coin.name} ({coin.symbol}){coin.network ? ` · ${coin.network} network` : ''}. Send only this coin on this network.</span></div>
             </div>
-          )}
 
-          <div className="cc-warn"><AlertTriangle size={16} /><span>Send only <strong>{coin.symbol}</strong>{coin.network ? <> on the <strong>{coin.network}</strong> network</> : ''}, worth <strong>{usd(amount)}</strong>. Sending another coin or network can lose the funds for good.</span></div>
+            <div>
+              <div className="pm-lbl">Upload payment proof</div>
+              {!file ? (
+                <button type="button" className="pm-drop" onClick={() => inputRef.current?.click()}>
+                  <Upload size={18} />Tap to upload a screenshot of your payment<br />JPG or PNG, up to {MAX_PROOF_MB}MB
+                </button>
+              ) : (
+                <div className="pm-file">
+                  {preview && <img src={preview} alt="Payment proof preview" />}
+                  <span>{file.name}</span>
+                  <button type="button" disabled={busy} onClick={() => { setFile(null); setPreview(null); }} aria-label="Remove proof"><X size={16} /></button>
+                </div>
+              )}
+              <input ref={inputRef} type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={pick} />
+            </div>
+          </>
+        )}
 
-          <div>
-            <div className="cc-lbl">Transaction hash <em>(optional — paste after sending)</em></div>
-            <input className="cc-input" placeholder="e.g. 0xabc123… or txid" value={txHash} onChange={e => setTxHash(e.target.value)} />
-          </div>
+        {err && <div className="pm-err"><AlertCircle size={16} style={{ flexShrink: 0 }} />{err}</div>}
 
-          <div>
-            <div className="cc-lbl">Payment screenshot <em style={{ color: 'var(--red, #FF6470)' }}>(required)</em></div>
-            {!file ? (
-              <button type="button" className="cc-drop" onClick={() => inputRef.current?.click()}>
-                <Upload size={18} />Upload a screenshot of your payment (JPG or PNG, up to {MAX_PROOF_MB}MB)
-              </button>
-            ) : (
-              <div className="cc-file">
-                {preview && <img src={preview} alt="Payment proof preview" />}
-                <span>{file.name}</span>
-                <button type="button" onClick={() => { setFile(null); setPreview(null); }} aria-label="Remove screenshot"><X size={16} /></button>
-              </div>
-            )}
-            <input ref={inputRef} type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={pick} />
-          </div>
-        </>
-      )}
-
-      {err && <div className="cc-err"><AlertCircle size={16} style={{ flexShrink: 0 }} />{err}</div>}
-
-      <div className="cc-actions">
-        {onBack && <button type="button" className="cc-btn cc-btn-ghost" disabled={busy} onClick={onBack}>Back</button>}
-        <button type="button" className="cc-btn cc-btn-accent" disabled={busy || !coin || !file} onClick={submit}>
-          {busy ? <><Loader2 size={16} className="cc-spin" />Submitting…</> : <><CheckCheck size={16} />{submitLabel}</>}
+        <button type="button" className="pm-go" disabled={busy || !coin || !file} onClick={submit}>
+          {busy ? <><Loader2 size={16} className="pm-spin" />Confirming…</> : confirmLabel}
         </button>
+        <div className="pm-note"><ShieldCheck size={14} />Starts once we confirm your payment, usually within a few hours</div>
       </div>
-      <div className="cc-secure"><ShieldCheck size={14} />Your purchase starts once we confirm the payment, usually within a few hours</div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -66,17 +66,6 @@ const useGoogleTranslate = () => {
   }, []);
 };
 
-const useChatwayWidget = () => {
-  useEffect(() => {
-    if (document.getElementById("chatway-widget-script")) return;
-    const script = document.createElement("script");
-    script.id = "chatway-widget-script";
-    script.src = "https://cdn.chatway.app/widget.js?id=rES12jPIPPNO";
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
-};
-
 const ChevronDown = () => (
   <svg className="tf-chevron" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1646,7 +1635,6 @@ const SignUp = () => {
   useGoogleTranslate();
 
   // Inject Chatway live-chat widget
-  useChatwayWidget();
 
   const totalSteps = 3;
 

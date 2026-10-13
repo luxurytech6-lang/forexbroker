@@ -27,8 +27,8 @@ import {
 } from "lucide-react";
 import {
   LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers,
-  Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
-  CreditCard as DkCard, UserCircle as DkUser, Settings as DkSettings, Headset as DkHeadset,
+  Building2 as DkBuilding, Pickaxe as DkPickaxe, Layers as DkLayers, Repeat as DkRepeat, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
+  CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset,
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 import supabase from "../supabase";
@@ -293,6 +293,8 @@ const DK_NAV = [
     { key:'hire',      href:'/hire-trader',  Icon:DkUsers,     label:'Hire a Trader' },
     { key:'realestate',href:'/real-estate',  Icon:DkBuilding,  label:'Real Estate', badge:'NEW' },
     { key:'mining',    href:'/mining',       Icon:DkPickaxe,   label:'Mining',      badge:'NEW' },
+    { key:'staking',   href:'/staking',      Icon:DkLayers,    label:'Staking',     badge:'NEW' },
+    { key:'swap',      href:'/swap',         Icon:DkRepeat,    label:'Swap',        badge:'NEW' },
     { key:'terminal',  href:'/terminal',     Icon:DkCandle,    label:'Terminal' },
   ]},
   { title:'Discover', links:[
@@ -303,6 +305,7 @@ const DK_NAV = [
     { key:'payments',  href:'/payments',     Icon:DkCard,      label:'Payments' },
     { key:'cards',     href:'/cards',        Icon:DkCards,     label:'Cards' },
     { key:'profile',   href:'/profile',      Icon:DkUser,      label:'Profile' },
+    { key:'identity',  href:'/verify-identity', Icon:DkShield,  label:'Verify identity' },
     { key:'settings',  href:'/settings',     Icon:DkSettings,  label:'Settings' },
     { key:'support',   href:'/support',      Icon:DkHeadset,   label:'Support' },
   ]},
@@ -694,7 +697,7 @@ function OrderDrawer({ initialProduct, user, onClose, onOrdered }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pendingOnly, setPendingOnly] = useState(false);
-  const [paying, setPaying] = useState(false);       // crypto payment step for paid cards
+  const [paying, setPaying] = useState(false);       // payment modal open (paid cards)
   const [userId, setUserId] = useState(null);
 
   useEffect(() => { supabase.auth.getSession().then(({ data }) => setUserId(data?.session?.user?.id || null)); }, []);
@@ -724,11 +727,11 @@ function OrderDrawer({ initialProduct, user, onClose, onOrdered }) {
     postal_code:addr.postal.trim(), country:addr.country.trim(), phone:addr.phone.trim(),
   } : null);
 
-  /* Paid cards: CryptoCheckout uploads the proof, then this files a pending order */
+  /* Paid cards: the payment modal uploads the proof, then this files a pending order */
   const submitPayment = async (pay) => {
     const { error: insErr } = await supabase.from('card_orders').insert({
       user_id: userId, product, design, name_on_card: name.trim(), delivery: deliveryInfo(), fee: p.price, status: 'pending',
-      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath,
+      pay_coin: pay.coin, pay_network: pay.network, pay_tx_hash: pay.txHash, proof_url: pay.proofPath, payment_tx_id: pay.transactionId,
     });
     if (insErr) throw new Error(isMissingTable(insErr) ? 'Card ordering isn’t set up yet. Please try again later.' : insErr.message);
     setPendingOnly(true); setPaying(false); setStep(3);
@@ -736,7 +739,7 @@ function OrderDrawer({ initialProduct, user, onClose, onOrdered }) {
   };
 
   const place = async () => {
-    if (p.price > 0) { setError(''); setPaying(true); return; }   // paid card → crypto payment step
+    if (p.price > 0) { setError(''); setPaying(true); return; }   // paid card → payment modal
     setBusy(true); setError('');
     const delivery = deliveryInfo();
     try {
@@ -839,11 +842,7 @@ function OrderDrawer({ initialProduct, user, onClose, onOrdered }) {
                 </>
               )}
 
-              {paying && (
-                <CryptoCheckout amount={p.price} label={`${p.name} · ${DESIGNS[design]?.label || design}`} userId={userId}
-                  context={`card-${product}`} onSubmit={submitPayment} onBack={() => setPaying(false)} submitLabel="I've sent the payment" />
-              )}
-              {step === reviewStep && !paying && (
+              {step === reviewStep && (
                 <>
                   <div className="cd-review num">
                     <div><span>Card</span><strong>{p.name}</strong></div>
@@ -861,15 +860,28 @@ function OrderDrawer({ initialProduct, user, onClose, onOrdered }) {
           )}
         </div>
 
-        {step !== 3 && !paying && (
+        {step !== 3 && (
           <div className="cd-drawer-foot">
             {step > 0 && <button className="cd-btn cd-btn-ghost" onClick={back} disabled={busy}>Back</button>}
             {step !== reviewStep
               ? <button className="cd-btn cd-btn-accent" onClick={next}>Continue <ChevronRight /></button>
-              : <button className="cd-btn cd-btn-accent" onClick={place} disabled={busy || (p.price > 0 && !userId)}>{busy ? 'Placing order…' : p.price ? `Continue to payment · ${usd(p.price, 0)}` : 'Order card'}</button>}
+              : <button className="cd-btn cd-btn-accent" onClick={place} disabled={busy || (p.price > 0 && !userId)}>{busy ? 'Placing order…' : p.price ? `Order card · ${usd(p.price, 0)}` : 'Order card'}</button>}
           </div>
         )}
       </aside>
+      {paying && (
+        <CryptoCheckout
+          title="Card payment"
+          amount={p.price}
+          label={`${p.name} · ${DESIGNS[design]?.label || design}`}
+          confirmLabel="Confirm card payment"
+          userId={userId}
+          context={`card-${product}`}
+          transaction={{ type: 'card_order', description: `Card order: ${p.name}` }}
+          onSubmit={submitPayment}
+          onClose={() => setPaying(false)}
+        />
+      )}
     </>
   );
 }

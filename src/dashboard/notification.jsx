@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import supabase from "../supabase";
 import {
-  LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers, Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend, CreditCard as DkCard, UserCircle as DkUser, Settings as DkSettings, Headset as DkHeadset, LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
+  LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers, Building2 as DkBuilding, Pickaxe as DkPickaxe, Layers as DkLayers, Repeat as DkRepeat, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend, CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset, LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 
 /* ─── Design tokens (matches Insights / Payment / CopyTrading) ───────────────── */
@@ -645,6 +645,8 @@ const DK_NAV = [
     { key:'hire',      href:'/hire-trader',  Icon:DkUsers,     label:'Hire a Trader' },
     { key:'realestate',href:'/real-estate',  Icon:DkBuilding,  label:'Real Estate', badge:'NEW' },
     { key:'mining',    href:'/mining',       Icon:DkPickaxe,   label:'Mining',      badge:'NEW' },
+    { key:'staking',   href:'/staking',      Icon:DkLayers,    label:'Staking',     badge:'NEW' },
+    { key:'swap',      href:'/swap',         Icon:DkRepeat,    label:'Swap',        badge:'NEW' },
     { key:'terminal',  href:'/terminal',     Icon:DkCandle,    label:'Terminal' },
   ]},
   { title:'Discover', links:[
@@ -655,6 +657,7 @@ const DK_NAV = [
     { key:'payments',  href:'/payments',     Icon:DkCard,      label:'Payments' },
     { key:'cards',     href:'/cards',        Icon:DkCards,     label:'Cards' },
     { key:'profile',   href:'/profile',      Icon:DkUser,      label:'Profile' },
+    { key:'identity',  href:'/verify-identity', Icon:DkShield,  label:'Verify identity' },
     { key:'settings',  href:'/settings',     Icon:DkSettings,  label:'Settings' },
     { key:'support',   href:'/support',      Icon:DkHeadset,   label:'Support' },
   ]},

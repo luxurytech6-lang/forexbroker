@@ -91,7 +91,7 @@ function welcomeHtml(firstName: string, hasAttachment: boolean) {
         </td></tr>
         <tr><td style="padding:0 36px">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            ${step(1, "Verify your identity", "Confirm who you are so deposits and withdrawals aren’t held up later.", "/profile", "Verify now")}
+            ${step(1, "Verify your identity", "Confirm who you are so deposits and withdrawals aren’t held up later.", "/verify-identity", "Verify now")}
             ${step(2, "Fund your wallet", "Add money to your USD wallet. It funds trading, copy trading, property and your card.", "/payments", "Add funds")}
             ${step(3, "Choose how to invest", "Trade stocks yourself, copy or hire a trader, or buy shares of rental property.", "/dashboard", "Go to your dashboard")}
           </table>

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import supabase from "../supabase";
+import CryptoCheckout from "../payment/CryptoCheckout";
 import {
   Copy, Users, TrendingUp, Download, Plus, Wallet, Trophy, AlertCircle, Lock, Check, Info, X,
 } from "lucide-react";
 import {
   LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers,
-  Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
-  CreditCard as DkCard, UserCircle as DkUser, Settings as DkSettings, Headset as DkHeadset,
+  Building2 as DkBuilding, Pickaxe as DkPickaxe, Layers as DkLayers, Repeat as DkRepeat, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
+  CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset,
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
 
@@ -835,6 +836,8 @@ const DK_NAV = [
     { key:'hire',      href:'/hire-trader',  Icon:DkUsers,     label:'Hire a Trader' },
     { key:'realestate',href:'/real-estate',  Icon:DkBuilding,  label:'Real Estate', badge:'NEW' },
     { key:'mining',    href:'/mining',       Icon:DkPickaxe,   label:'Mining',      badge:'NEW' },
+    { key:'staking',   href:'/staking',      Icon:DkLayers,    label:'Staking',     badge:'NEW' },
+    { key:'swap',      href:'/swap',         Icon:DkRepeat,    label:'Swap',        badge:'NEW' },
     { key:'terminal',  href:'/terminal',     Icon:DkCandle,    label:'Terminal' },
   ]},
   { title:'Discover', links:[
@@ -845,6 +848,7 @@ const DK_NAV = [
     { key:'payments',  href:'/payments',     Icon:DkCard,      label:'Payments' },
     { key:'cards',     href:'/cards',        Icon:DkCards,     label:'Cards' },
     { key:'profile',   href:'/profile',      Icon:DkUser,      label:'Profile' },
+    { key:'identity',  href:'/verify-identity', Icon:DkShield,  label:'Verify identity' },
     { key:'settings',  href:'/settings',     Icon:DkSettings,  label:'Settings' },
     { key:'support',   href:'/support',      Icon:DkHeadset,   label:'Support' },
   ]},
@@ -1221,8 +1225,8 @@ function CopyingCard({ rel, symbol = '$' }) {
           <div style={{ fontFamily: T.serif, fontSize:14, fontWeight:600 }}>{t.display_name}</div>
           <div style={{ fontSize:11, color:T.nt }}>{t.handle}</div>
         </div>
-        <span className={`ct-badge ct-badge-${rel.status === 'active' ? 'green' : rel.status === 'paused' ? 'muted' : 'red'}`}>
-          {rel.status.charAt(0).toUpperCase() + rel.status.slice(1)}
+        <span className={`ct-badge ct-badge-${rel.status === 'active' ? 'green' : rel.status === 'pending' ? 'gold' : rel.status === 'paused' ? 'muted' : 'red'}`}>
+          {rel.status === 'pending' ? 'Confirming payment' : rel.status.charAt(0).toUpperCase() + rel.status.slice(1)}
         </span>
       </div>
       <div style={{ marginBottom:14 }}>
@@ -1247,10 +1251,16 @@ function CopyingCard({ rel, symbol = '$' }) {
           </div>
         ))}
       </div>
-      <div className="ct-copy-actions">
-        <button className="ct-copy-btn ct-copy-btn-pause">⏸ Pause</button>
-        <button className="ct-copy-btn ct-copy-btn-stop">✕ Stop</button>
-      </div>
+      {rel.status === 'pending' ? (
+        <div style={{ fontSize:12, color:T.nt, lineHeight:1.5, padding:'10px 12px', background:T.s2, borderRadius:8 }}>
+          We've received your payment. Copying starts as soon as we confirm it, usually within a few hours.
+        </div>
+      ) : (
+        <div className="ct-copy-actions">
+          <button className="ct-copy-btn ct-copy-btn-pause">⏸ Pause</button>
+          <button className="ct-copy-btn ct-copy-btn-stop">✕ Stop</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1318,12 +1328,21 @@ function CopyModal({ trader: t, onClose, userId, userPlan }) {
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
   const [saveErr, setSaveErr]   = useState('');
+  const [paying, setPaying]     = useState(false);   // crypto payment step
   const estReturn = amount ? ((parseFloat(amount) * (t.perf?.roi_pct ?? t.roi_pct ?? 0)) / 100).toFixed(2) : null;
   const allowed = canUseCopyTrading(userPlan);
 
-  const handleStartCopying = async () => {
+  /* Step 1: check the amount, then open the payment modal */
+  const handleStartCopying = () => {
     if (!amount || parseFloat(amount) <= 0) { setSaveErr('Please enter a valid amount.'); return; }
-    setSaving(true); setSaveErr('');
+    setSaveErr('');
+    setPaying(true);
+  };
+
+  /* Step 2: called by the payment modal once the proof is uploaded — file a pending copy.
+     An admin checks the payment (Admin → Copy trading → Requests) and switches it on. */
+  const submitPayment = async (pay) => {
+    setSaving(true);
     try {
       const { error } = await supabase.from('copy_relationships').insert({
         copier_id:        userId,
@@ -1332,21 +1351,29 @@ function CopyModal({ trader: t, onClose, userId, userPlan }) {
         currency:         'USD',
         copy_ratio:       ratio,
         stop_loss_pct:    parseFloat(stopLoss) || null,
-        status:           'active',
+        status:           'pending',
         realised_gain:    0,
+        pay_coin:         pay.coin,
+        pay_network:      pay.network,
+        pay_tx_hash:      pay.txHash,
+        proof_url:        pay.proofPath,
+        payment_tx_id:    pay.transactionId,
       });
-      if (error) throw error;
+      if (error) {
+        // copy_relationships allows one row per copier and trader
+        if (error.code === '23505') throw new Error(`You already have a copy of ${t.display_name.split(' ')[0]} running or waiting for confirmation.`);
+        throw error;
+      }
+      setPaying(false);
       setSaved(true);
-    } catch (err) {
-      setSaveErr(err.message || 'Failed to start copying. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="ct-modal-overlay" onClick={onClose}>
-      <div className="ct-modal" onClick={e => e.stopPropagation()}>
+    <div className="ct-modal-overlay" onClick={() => !saving && onClose()}>
+      <div className="ct-modal" onClick={e => e.stopPropagation()} >
         <button className="ct-modal-close" onClick={onClose}><X size={14} /></button>
         <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:20 }}>
           <div className="ct-av" style={{ width:50, height:50, background:t.color_hex, fontSize:16 }}>{t.initials}</div>
@@ -1405,9 +1432,13 @@ function CopyModal({ trader: t, onClose, userId, userPlan }) {
             <button className="ct-upgrade-skip" onClick={onClose}>Maybe later</button>
           </div>
         ) : saved ? (
-          <div style={{ background:'rgba(52,211,153,.1)', border:'1px solid rgba(52,211,153,.3)', borderRadius:10, padding:'18px', textAlign:'center', color: T.gn, fontSize:14, fontWeight:600 }}>
-            <Check size={20} style={{ display:'block', margin:'0 auto 6px' }} />
-            Now copying {t.display_name.split(' ')[0]}!
+          <div style={{ background:'rgba(226,174,74,.08)', border:'1px solid rgba(226,174,74,.3)', borderRadius:10, padding:'18px', textAlign:'center' }}>
+            <Check size={20} style={{ display:'block', margin:'0 auto 6px', color:T.g }} />
+            <div style={{ fontSize:14, fontWeight:600, color:T.gr, marginBottom:6 }}>Payment submitted</div>
+            <div style={{ fontSize:12.5, color:T.nt, lineHeight:1.6 }}>
+              We've received your ${parseFloat(amount).toLocaleString()} payment to copy {t.display_name.split(' ')[0]}.
+              Copying starts as soon as we confirm it, usually within a few hours. You'll see it under <strong style={{ color:T.gr }}>Copying</strong>, marked as confirming until then.
+            </div>
           </div>
         ) : (
           <>
@@ -1444,11 +1475,24 @@ function CopyModal({ trader: t, onClose, userId, userPlan }) {
               onClick={handleStartCopying}
               disabled={saving}
             >
-              {saving ? 'Starting…' : `Start Copying ${t.display_name.split(' ')[0]} →`}
+              {`Start Copying ${t.display_name.split(' ')[0]} →`}
             </button>
           </>
         )}
-              </div>
+      </div>
+      {paying && (
+        <CryptoCheckout
+          title="Copy trading payment"
+          amount={parseFloat(amount)}
+          label={`Amount to copy ${t.display_name}`}
+          confirmLabel="Confirm copy trading payment"
+          userId={userId}
+          context={`copy-${t.id}`}
+          transaction={{ type: 'copy_trading', description: `Copy trading: ${t.display_name}` }}
+          onSubmit={submitPayment}
+          onClose={() => setPaying(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1538,15 +1582,7 @@ export default function CopyTrading() {
     setActiveTheme(theme);
   }, [settings]);
 
-  // Inject Chatway live-chat widget
-  useEffect(() => {
-    if (document.getElementById('chatway-widget-script')) return;
-    const script = document.createElement('script');
-    script.id = 'chatway-widget-script';
-    script.src = 'https://cdn.chatway.app/widget.js?id=rES12jPIPPNO';
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
+  // Chatway live chat is loaded once for the whole app in App.js (ChatwayWidget)
 
   /* ── Watch system colour-scheme changes when theme === 'system' ── */
   useEffect(() => {
@@ -1687,7 +1723,7 @@ export default function CopyTrading() {
           )
         `)
         .eq('copier_id', user.id)
-        .in('status', ['active', 'paused']);
+        .in('status', ['active', 'paused', 'pending']);   // pending = paid, waiting for an admin to confirm
 
       if (relErr) throw relErr;
       const fxRate = await getUsdRate(user.currency);
@@ -1707,8 +1743,10 @@ export default function CopyTrading() {
   }, [user]);
 
   /* ── Derived metrics ── */
-  const totalAllocated = copyingRels.reduce((s, r) => s + parseFloat(r.allocated_amount || 0), 0);
-  const totalGain      = copyingRels.reduce((s, r) => s + parseFloat(r.realised_gain || 0), 0);
+  const liveRels       = copyingRels.filter(r => r.status !== 'pending');
+  const pendingRels    = copyingRels.filter(r => r.status === 'pending');
+  const totalAllocated = liveRels.reduce((s, r) => s + parseFloat(r.allocated_amount || 0), 0);
+  const totalGain      = liveRels.reduce((s, r) => s + parseFloat(r.realised_gain || 0), 0);
   const metricsSymbol  = currencySymbol(user?.currency);
   const bestPerformer  = traders.reduce((best, t) => {
     const roi = t.perf?.roi_pct ?? 0;
@@ -1716,7 +1754,7 @@ export default function CopyTrading() {
   }, null);
 
   const METRICS = [
-    { label:'Copying',        value:`${copyingRels.length} Trader${copyingRels.length !== 1 ? 's' : ''}`, sub:'Active now',       color: T.g,  Icon:Copy },
+    { label:'Copying',        value:`${liveRels.length} Trader${liveRels.length !== 1 ? 's' : ''}`, sub: pendingRels.length ? `${pendingRels.length} awaiting payment confirmation` : 'Active now', color: T.g,  Icon:Copy },
     { label:'Copy Gains',     value:totalGain >= 0 ? `+${metricsSymbol}${totalGain.toLocaleString()}` : `-${metricsSymbol}${Math.abs(totalGain).toLocaleString()}`, sub:`▲ Total realised gain`, color: '#34d399', Icon:TrendingUp },
     { label:'Allocated',      value:`${metricsSymbol}${totalAllocated.toLocaleString()}`, sub:'Total in copy trades', color: T.bl, Icon:Wallet },
     { label:'Best Performer', value: bestPerformer ? bestPerformer.handle : '—', sub: bestPerformer ? `+${bestPerformer.perf?.roi_pct ?? 0}% / 30D` : 'No data yet', color: T.g,  Icon:Trophy },
