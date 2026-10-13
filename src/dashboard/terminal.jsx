@@ -356,6 +356,9 @@ input,select{font-family:var(--sans);}
   border-radius:var(--r1);padding:8px 10px;
 }
 .op-balance-warn i{font-size:14px;flex-shrink:0;}
+.op-deposit-link{color:var(--g);font-weight:800;text-decoration:underline;margin-left:2px;}
+.op-avail{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--nt);background:var(--s2);border:1px solid var(--br);border-radius:var(--r1);padding:7px 10px;}
+.op-avail strong{color:var(--g);font-size:12.5px;font-weight:800;}
 .op-type-row{display:flex;gap:3px;background:var(--s2);border-radius:var(--r1);padding:3px;}
 .op-type-btn{flex:1;font-size:10px;font-weight:700;padding:4px 0;border-radius:5px;text-align:center;background:transparent;color:var(--nt);transition:all .15s;}
 .op-type-btn.active{background:var(--s);color:var(--tx);box-shadow:0 1px 3px rgba(0,0,0,.3);}
@@ -801,6 +804,9 @@ html,body,#root{font-variant-numeric:tabular-nums;}
 .nav-drop-item:hover{background:var(--s2);color:var(--tx);}
 .nav-drop-out:hover{color:var(--rd);}
 .btn-connect{height:36px;padding:0 14px;border-radius:9px;font-size:13.5px;font-weight:600;color:#07101E;}
+.nav-bal{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border-radius:9px;border:1px solid var(--br);background:var(--s2);font-size:12.5px;color:var(--nt);text-decoration:none;white-space:nowrap;}
+.nav-bal strong{color:var(--tx);font-weight:700;}
+.nav-bal:hover{border-color:var(--g);}
 .btn-connect:hover{opacity:1;filter:brightness(1.07);box-shadow:none;}
 .btn-disconnect{height:36px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:600;}
 .sidebar{width:280px;}
@@ -1641,6 +1647,12 @@ function Watchlist({ prices, selected, onSelect, watchlist, onAddSymbol, onRemov
         </div>
       )}
 
+      {!session && (
+        <div className="wl-account">
+          <div className="wl-acc-row" style={{ fontSize:11.5 }}><span>Balance</span><span className="mono text-gold">{fmtBal(userBalance, userCurrency)}</span></div>
+        </div>
+      )}
+
       <div className="wl-head"><span>Symbol</span><span style={{ textAlign:'right' }}>Bid</span><span style={{ textAlign:'right' }}>Ask</span></div>
 
       <div className="wl-body">
@@ -1936,7 +1948,20 @@ function MobileTradeHistory({ history }) {
 
 /* ─── OrderPanel ─────────────────────────────────────────────────────────────── */
 
-function OrderPanel({ sym, prices, onPlace, userBalance, session }) {
+const fmtBal = (n, cur = 'USD') => `${cur} ${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const NO_FUNDS_MSG = (cur = 'USD') => `Your balance is ${fmtBal(0, cur)} — deposit funds to start trading.`;
+
+/* Shown in the order panels when the wallet is empty */
+function BalanceWarn({ userCurrency, style }) {
+  return (
+    <div className="op-balance-warn" style={style}>
+      <i className="ti ti-alert-triangle"/>
+      <span>{NO_FUNDS_MSG(userCurrency)} <a href="/payments" className="op-deposit-link">Deposit</a></span>
+    </div>
+  );
+}
+
+function OrderPanel({ sym, prices, onPlace, userBalance, userCurrency, session }) {
   const inst = ALL_INSTRUMENTS.find(i => i.sym === sym);
   const p    = prices[sym];
   const [orderType, setOrderType] = useState('market');
@@ -1982,12 +2007,11 @@ function OrderPanel({ sym, prices, onPlace, userBalance, session }) {
       </div>
 
       <div className="op-body">
-        {!canTrade && (
-          <div className="op-balance-warn">
-            <i className="ti ti-alert-triangle"/>
-            {session ? 'Insufficient balance — deposit funds to trade.' : 'Connect an account with available balance to trade.'}
-          </div>
-        )}
+        <div className="op-avail">
+          <span>Available balance</span>
+          <strong className="mono">{fmtBal(userBalance, userCurrency)}</strong>
+        </div>
+        {!canTrade && <BalanceWarn userCurrency={userCurrency}/>}
 
         <div className="op-type-row">
           {['market','limit','stop'].map(t => <button key={t} className={`op-type-btn${orderType===t?' active':''}`} onClick={() => setOrderType(t)}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>)}
@@ -2128,7 +2152,12 @@ function AppNav({ onMenuToggle, session, onConnectClick, onDisconnect, userBalan
             <button className="btn-disconnect" onClick={onDisconnect}><i className="ti ti-plug-x"/> Disconnect</button>
           </>
         ) : (
-          <button className="btn-connect" onClick={onConnectClick}><i className="ti ti-plug"/> Connect account</button>
+          <>
+            <a href="/payments" className="nav-bal" title="Your available balance">
+              <span>Balance</span><strong className="mono">{fmtBal(userBalance, userCurrency)}</strong>
+            </a>
+            <button className="btn-connect" onClick={onConnectClick}><i className="ti ti-plug"/> Connect account</button>
+          </>
         )}
         <a href="/notification" className="nav-icon-btn" aria-label="Notifications"><i className="ti ti-bell"/><span className="nav-ndot"/></a>
         <div className="nav-menu" ref={menuRef}>
@@ -2394,7 +2423,7 @@ function MobileChartPane({ sym, tf, onTf, prices, chartType, onChartType }) {
 
 /* ─── MobileTradeScreen ──────────────────────────────────────────────────────── */
 
-function MobileTradeScreen({ sym, prices, positions, onPlace, onClosePos, userBalance, session }) {
+function MobileTradeScreen({ sym, prices, positions, onPlace, onClosePos, userBalance, userCurrency, session }) {
   const [tab,       setTab]       = useState('new');
   const [orderType, setOrderType] = useState('market');
   const [lots,      setLots]      = useState('0.10');
@@ -2505,12 +2534,11 @@ function MobileTradeScreen({ sym, prices, positions, onPlace, onClosePos, userBa
             </div>
 
             {/* Execute buttons */}
-            {!canTrade && (
-              <div className="op-balance-warn" style={{ marginBottom:10 }}>
-                <i className="ti ti-alert-triangle"/>
-                {session ? 'Insufficient balance — deposit funds to trade.' : 'Connect an account with available balance to trade.'}
-              </div>
-            )}
+            <div className="op-avail" style={{ marginBottom:10 }}>
+              <span>Available balance</span>
+              <strong className="mono">{fmtBal(userBalance, userCurrency)}</strong>
+            </div>
+            {!canTrade && <BalanceWarn userCurrency={userCurrency} style={{ marginBottom:10 }}/>}
             <div className="op-exec-row" style={{ marginBottom:10 }}>
               <button className="op-exec-btn op-exec-sell" style={{ padding:'16px 6px' }} onClick={() => place('sell')} disabled={!canTrade}>
                 <span className="op-exec-lbl" style={{ fontSize:12, letterSpacing:2 }}>SELL</span>
@@ -2635,7 +2663,11 @@ function MobileSettingsScreen({ session, onConnectClick, onDisconnect, userBalan
                 <div style={{ color:'var(--nt)' }}>Balance</div><div className="mono text-gold">{userCurrency} {userBalance.toFixed(2)}</div>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div style={{ background:'var(--s2)', borderRadius:8, padding:'10px 12px', marginBottom:12, display:'flex', justifyContent:'space-between', fontSize:12 }}>
+              <span style={{ color:'var(--nt)' }}>Balance</span><span className="mono text-gold">{fmtBal(userBalance, userCurrency)}</span>
+            </div>
+          )}
           {session
             ? <button className="btn-disconnect" style={{ width:'100%', justifyContent:'center', padding:'9px' }} onClick={onDisconnect}><i className="ti ti-plug-x"/> Disconnect Account</button>
             : <button className="btn-connect" style={{ width:'100%', justifyContent:'center', padding:'10px', fontSize:13 }} onClick={onConnectClick}><i className="ti ti-plug"/> Connect Account</button>
@@ -2660,6 +2692,14 @@ function MobileSettingsScreen({ session, onConnectClick, onDisconnect, userBalan
       </div>
     </div>
   );
+}
+
+/* The terminal trades from the main cash wallet: the account currency, else USD,
+   else the first wallet. Users can hold several wallets (e.g. BTC after a swap). */
+function pickTradingWallet(rows, preferred) {
+  const list = Array.isArray(rows) ? rows : rows ? [rows] : [];
+  const by = c => c && list.find(w => String(w.currency).toUpperCase() === String(c).toUpperCase());
+  return by(preferred) || by('USD') || list[0] || null;
 }
 
 /* ─── Terminal Page ──────────────────────────────────────────────────────────── */
@@ -2697,13 +2737,14 @@ export default function Terminal() {
 
         const [{ data: profile }, { data: wallet }, { data: openRows }, { data: closedRows }] = await Promise.all([
           supabase.from('users').select('currency, first_name, last_name').eq('id', uid).single(),
-          supabase.from('wallets').select('balance, currency').eq('user_id', uid).maybeSingle(),
+          supabase.from('wallets').select('balance, currency').eq('user_id', uid),
           supabase.from('open_positions').select('*').eq('user_id', uid).eq('status', 'open'),
           supabase.from('open_positions').select('*').eq('user_id', uid).eq('status', 'closed').order('closed_at', { ascending: false }).limit(200),
         ]);
 
-        setUserCurrency(wallet?.currency || profile?.currency || 'USD');
-        setUserBalance(parseFloat(wallet?.balance ?? 0) || 0);
+        const w = pickTradingWallet(wallet, profile?.currency);
+        setUserCurrency(w?.currency || profile?.currency || 'USD');
+        setUserBalance(parseFloat(w?.balance ?? 0) || 0);
         setUserName(profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : '');
 
         if (openRows && openRows.length > 0) {
@@ -2754,6 +2795,23 @@ export default function Terminal() {
     return () => subscription.unsubscribe();
   }, []);
 
+  /* ── Refresh the balance when the user comes back to the tab (e.g. a deposit was approved) ── */
+  useEffect(() => {
+    if (!userId) return;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const [{ data: rows }, { data: prof }] = await Promise.all([
+        supabase.from('wallets').select('balance, currency').eq('user_id', userId),
+        supabase.from('users').select('currency').eq('id', userId).maybeSingle(),
+      ]);
+      const w = pickTradingWallet(rows, prof?.currency);
+      if (w) { setUserCurrency(w.currency); setUserBalance(parseFloat(w.balance) || 0); }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => { document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh); };
+  }, [userId]);
+
   /* ── Responsive: JS-driven mobile detection (≤768px) ── */
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
   useEffect(() => {
@@ -2790,9 +2848,7 @@ export default function Terminal() {
     // an empty (or not-yet-loaded) balance could place trades that have no
     // real capital behind them.
     if (!(userBalance > 0)) {
-      const msg = session
-        ? 'Insufficient balance — deposit funds to place a trade.'
-        : 'Connect an account with available balance to trade.';
+      const msg = NO_FUNDS_MSG(userCurrency);
       setOrderToast(msg);
       addJournal(msg);
       setTimeout(() => setOrderToast(null), 2500);
@@ -2841,7 +2897,7 @@ export default function Terminal() {
     setOrderToast(msg);
     addJournal(msg);
     setTimeout(() => setOrderToast(null), 2500);
-  }, [userId, userBalance, session]);
+  }, [userId, userBalance, userCurrency, session]);
 
   const handleClosePosition = useCallback(async id => {
     const pos = positions.find(p => p.id === id);
@@ -3028,7 +3084,7 @@ export default function Terminal() {
             </div>
           </div>
           <div className={`term-right${tabOrderOpen?' tab-open':''}`}>
-            <OrderPanel sym={selectedSym} prices={prices} onPlace={handlePlaceOrder} userBalance={userBalance} session={session}/>
+            <OrderPanel sym={selectedSym} prices={prices} onPlace={handlePlaceOrder} userBalance={userBalance} userCurrency={userCurrency} session={session}/>
           </div>
         </div>
 
@@ -3078,7 +3134,7 @@ export default function Terminal() {
           <MobileTradeScreen
             sym={selectedSym} prices={prices}
             positions={positions} onPlace={handlePlaceOrder} onClosePos={handleClosePosition}
-            userBalance={userBalance} session={session}
+            userBalance={userBalance} userCurrency={userCurrency} session={session}
           />
         </div>
         <div className={`mob-pane${mobView==='journal'?'':' hidden'}`}>
