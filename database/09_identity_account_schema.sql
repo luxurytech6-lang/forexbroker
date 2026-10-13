@@ -3,7 +3,7 @@
 -- Run in the Supabase SQL editor AFTER files 01–08. Safe to re-run.
 --
 --   identity_verifications     what a user submits on /verify-identity
---   storage "identity-documents" private bucket for ID photos and selfies
+--   storage "identity-documents" private bucket for ID document photos
 --   users: account + withdrawal controls
 --        status            active | suspended | locked
 --        withdrawal_status active | suspended | locked
@@ -238,7 +238,7 @@ create table if not exists public.identity_verifications (
   document_expiry   date,
   doc_front_path    text not null,
   doc_back_path     text,
-  selfie_path       text not null,
+  selfie_path       text,                 -- no longer collected; kept for older submissions
   rejection_reason  text,
   reviewed_by       uuid references public.admins(id) on delete set null,
   reviewed_at       timestamptz,
@@ -246,6 +246,9 @@ create table if not exists public.identity_verifications (
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );
+-- Selfies are no longer collected (databases that ran an earlier version had this required)
+alter table public.identity_verifications alter column selfie_path drop not null;
+
 create index if not exists identity_verifications_user_idx   on public.identity_verifications(user_id, created_at desc);
 create index if not exists identity_verifications_status_idx on public.identity_verifications(status);
 create unique index if not exists identity_verifications_one_pending
@@ -297,7 +300,7 @@ begin
     raise exception 'This document has expired. Please use a valid document.';
   end if;
   if split_part(new.doc_front_path, '/', 1) <> v_uid
-     or split_part(new.selfie_path, '/', 1) <> v_uid
+     or (new.selfie_path is not null and split_part(new.selfie_path, '/', 1) <> v_uid)
      or (new.doc_back_path is not null and split_part(new.doc_back_path, '/', 1) <> v_uid) then
     raise exception 'Invalid document upload. Please upload your files again.';
   end if;

@@ -7,6 +7,7 @@ import {
   walletAdjust, notify, loadUsers, audit, usd, fmtDate, fmtDateTime, userName, PAYMENT_PROOF_BUCKET,
 } from '../adminShared';
 import { IDENTITY_BUCKET } from './Identity';
+import { ConnectionPill } from './Connections';
 
 /* Effective state: a suspension with an end date in the past no longer applies */
 const effective = (status, until) => {
@@ -185,6 +186,17 @@ function UserDrawer({ user, wallets, isAdmin, go, onClose, onChanged, onDeleted 
   }, [user.id]);
 
   const account = accountOf(user);
+
+  const [referrer, setReferrer] = useState(null);
+  useEffect(() => {
+    if (!user.referred_by) { setReferrer(null); return; }
+    supabase.from('users').select('first_name,last_name,email').eq('id', user.referred_by).maybeSingle().then(({ data }) => setReferrer(data || null));
+  }, [user.referred_by]);
+  const setConnection = (status) => run('conn', async () => {
+    const { data, error } = await supabase.rpc('admin_set_connection_status', { p_user_id: user.id, p_status: status });
+    if (error) throw error;
+    onChanged({ ...user, connection_status: data?.connection_status ?? status, connected_at: data?.connected_at ?? null });
+  }, status === 'connected' ? 'Account connected' : 'Disconnected');
   const withdrawals = withdrawalsOf(user);
 
   const update = (patch, msg) => run('upd', async () => {
@@ -281,6 +293,16 @@ function UserDrawer({ user, wallets, isAdmin, go, onClose, onChanged, onDeleted 
         {wallets.length ? wallets.map(w => <div key={w.currency}><span>{w.currency || 'USD'} wallet</span><strong>{usd(w.balance)}</strong></div>)
           : <div><span>Wallet</span><strong>No wallet yet</strong></div>}
         <div><span>Joined</span><strong>{fmtDateTime(user.created_at)}</strong></div>
+        <div><span>Connection</span>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, flexWrap:'wrap' }}>
+            <ConnectionPill status={user.connection_status} />
+            <span className="ad-mono" style={{ fontSize:12.5 }}>{user.connection_key || '—'}</span>
+            {user.connection_key && (user.connection_status === 'connected'
+              ? <button className="ad-btn ad-btn-ghost ad-btn-sm" disabled={!!busy} onClick={() => setConnection('not_connected')}>Disconnect</button>
+              : <button className="ad-btn ad-btn-ok ad-btn-sm" disabled={!!busy} onClick={() => setConnection('connected')}>Connect</button>)}
+          </div>
+        </div>
+        <div><span>Referral</span><strong>{user.referral_code ? <span className="ad-mono">{user.referral_code}</span> : '—'}{referrer ? <small style={{ display:'block', color:'var(--muted)', fontWeight:400 }}>Referred by {userName(referrer)}</small> : null}</strong></div>
         {user.handle && <div><span>Handle</span><strong>@{user.handle}</strong></div>}
         {user.phone && <div><span>Phone</span><strong>{user.dial_code && !String(user.phone).startsWith('+') ? `${user.dial_code} ` : ''}{user.phone}</strong></div>}
         {(user.country_name || user.location) && <div><span>Location</span><strong>{[user.location, user.country_name].filter(Boolean).join(', ')}</strong></div>}

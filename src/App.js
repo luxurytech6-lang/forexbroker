@@ -31,6 +31,8 @@ import Notifications    from './dashboard/notification';
 import Subscription     from './dashboard/subscription';
 import Mining           from './dashboard/mining';
 import VerifyIdentity   from './dashboard/VerifyIdentity';
+import Staking          from './dashboard/Staking';
+import Swap             from './dashboard/Swap';
 
 // Admin console
 import AdminLogin       from './admin/adminLogin';
@@ -68,6 +70,8 @@ function App() {
         <Route path="/hire-trader"  element={<HireTrader />} />
         <Route path="/real-estate"  element={<RealEstate />} />
         <Route path="/mining"       element={<Mining />} />
+        <Route path="/staking"      element={<Staking />} />
+        <Route path="/swap"         element={<Swap />} />
         <Route path="/terminal"     element={<TradingTerminal />} />
 
         {/* Discover */}

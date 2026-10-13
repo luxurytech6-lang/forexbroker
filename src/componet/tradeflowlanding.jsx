@@ -800,7 +800,7 @@ const SecIcon = ({ kind }) => {
 const MARKETS = [
   { name:"New York", ex:"NYSE and Nasdaq", tz:"America/New_York", open:9.5, close:16 },
   { name:"London",   ex:"London Stock Exchange", tz:"Europe/London", open:8, close:16.5 },
-  { name:"Lagos",    ex:"Nigerian Exchange", tz:"Africa/Lagos", open:10, close:14.5 },
+ 
   { name:"Tokyo",    ex:"Tokyo Stock Exchange", tz:"Asia/Tokyo", open:9, close:15.5 },
   { name:"Crypto",   ex:"Bitcoin, Ether and more", tz:null },
 ];

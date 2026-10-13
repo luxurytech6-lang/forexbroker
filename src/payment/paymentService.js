@@ -390,7 +390,7 @@ export async function recordWithdrawal({ userId, currency, amount, method, desti
 //   const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 //   serve(async (req) => {
 //     const { to, subject, html } = await req.json();
-//     await resend.emails.send({ from: "noreply@profitgainsignals.com", to, subject, html });
+//     await resend.emails.send({ from: "noreply@profitgainsignal.com", to, subject, html });
 //     return new Response("ok");
 //   });
 // ─────────────────────────────────────────────────────────────
@@ -461,13 +461,13 @@ export async function sendDepositEmail({ email, firstName, amount, currency, met
         <div class="detail-row"><span class="detail-label">Date</span><span class="detail-val">${date}</span></div>
         <div class="detail-row"><span class="detail-label">Status</span><span class="detail-val" style="color:#34d399">Completed</span></div>
       </div>
-      <a href="https://profitgainsignals.com/payments" class="cta">View Wallet →</a>
+      <a href="https://profitgainsignal.com/payments" class="cta">View Wallet →</a>
       <p style="font-size:12px;color:#64748b;text-align:center;line-height:1.6;">
-        If you did not initiate this deposit, please <a href="mailto:support@profitgainsignals.com" style="color:#E2AE4A;">contact support</a> immediately.
+        If you did not initiate this deposit, please <a href="mailto:support@profitgainsignal.com" style="color:#E2AE4A;">contact support</a> immediately.
       </p>
     </div>
     <div class="footer">
-      © ${new Date().getFullYear()} Profit Gain Signals · <a href="https://profitgainsignals.com/settings" style="color:#64748b;">Manage notifications</a>
+      © ${new Date().getFullYear()} Profit Gain Signals · <a href="https://profitgainsignal.com/settings" style="color:#64748b;">Manage notifications</a>
     </div>
   </div>
 </body>
@@ -539,12 +539,12 @@ export async function sendWithdrawalEmail({ email, firstName, amount, currency, 
       </div>
       <div class="warning">
         ⚠️ Withdrawals are subject to a 24-hour security review. Processing typically completes within 1–3 business days.
-        If you did not initiate this request, <a href="mailto:support@profitgainsignals.com" style="color:#f59e0b;">contact support immediately</a>.
+        If you did not initiate this request, <a href="mailto:support@profitgainsignal.com" style="color:#f59e0b;">contact support immediately</a>.
       </div>
-      <a href="https://profitgainsignals.com/payments?tab=history" class="cta">View Transaction History →</a>
+      <a href="https://profitgainsignal.com/payments?tab=history" class="cta">View Transaction History →</a>
     </div>
     <div class="footer">
-      © ${new Date().getFullYear()} Profit Gain Signals · <a href="https://profitgainsignals.com/settings" style="color:#64748b;">Manage notifications</a>
+      © ${new Date().getFullYear()} Profit Gain Signals · <a href="https://profitgainsignal.com/settings" style="color:#64748b;">Manage notifications</a>
     </div>
   </div>
 </body>

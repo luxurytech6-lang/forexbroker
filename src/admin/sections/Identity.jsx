@@ -1,11 +1,11 @@
 /**
  * Identity.jsx — Admin → Identity checks
  * Review identity verifications submitted on /verify-identity: see the
- * details, the ID photos and the selfie, then approve or reject with a reason.
+ * details and the ID photos, then approve or reject with a reason.
  * Approving marks the user as verified (the database does that).
  */
 import React, { useEffect, useState } from 'react';
-import { Check, X, Eye, FileText, ExternalLink, Loader2 } from 'lucide-react';
+import { Check, X, Eye, FileText, ExternalLink, Loader2, Mail } from 'lucide-react';
 import {
   supabase, PageHead, DataTable, Tabs, Pill, UserCell, Modal, useRows, useUsers, useAction, fmtDate, fmtDateTime,
 } from '../adminShared';
@@ -17,10 +17,22 @@ const REASONS = [
   'The photo is blurry or hard to read.',
   'The document has expired.',
   'The name doesn’t match your account details.',
-  'The selfie doesn’t match the document photo.',
   'Part of the document is cut off or covered.',
   'This type of document isn’t accepted.',
 ];
+/* Email the user that they're verified (send-identity-email edge function).
+   The database trigger normally does this too; the function only sends once. */
+export async function sendApprovalEmail(verificationId) {
+  try {
+    const { data, error } = await supabase.functions.invoke('send-identity-email', { body: { verification_id: verificationId } });
+    if (error) throw error;
+    return data || {};
+  } catch (e) {
+    console.warn('Approval email not sent:', e?.message || e);
+    return { sent: false, error: e?.message || String(e) };
+  }
+}
+
 const age = (dob) => { if (!dob) return ''; const d = new Date(dob), n = new Date(); let a = n.getFullYear() - d.getFullYear(); if (n < new Date(n.getFullYear(), d.getMonth(), d.getDate())) a--; return a; };
 
 export default function IdentitySection({ refreshCounts }) {
@@ -34,7 +46,7 @@ export default function IdentitySection({ refreshCounts }) {
 
   return (
     <>
-      <PageHead title="Identity checks" sub="Check each person's ID and selfie. Approving marks their account as verified; rejecting asks them to try again with the reason you give." />
+      <PageHead title="Identity checks" sub="Check each person's details and ID document. Approving marks their account as verified; rejecting asks them to try again with the reason you give." />
       <Tabs value={tab} onChange={setTab} items={[
         { key:'pending',  label:'Waiting for review', count: count('pending') },
         { key:'approved', label:'Approved' },
@@ -59,7 +71,7 @@ export default function IdentitySection({ refreshCounts }) {
   );
 }
 
-function DocImage({ path, label }) {
+export function DocImage({ path, label }) {
   const [url, setUrl] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {
@@ -95,8 +107,16 @@ function ReviewModal({ row: r, user, onClose, onDone }) {
   const review = (approve) => run(approve ? 'ok' : 'no', async () => {
     const { error } = await supabase.rpc('admin_review_identity', { p_id: r.id, p_approve: approve, p_reason: approve ? null : reason.trim() });
     if (error) throw error;
+    if (approve) sendApprovalEmail(r.id);   // in the background; never holds up the approval
     onDone();
-  }, approve ? 'Identity approved' : 'Identity rejected');
+  }, approve ? 'Identity approved — the user is being emailed' : 'Identity rejected');
+
+  const resend = () => run('mail', async () => {
+    const { error } = await supabase.from('identity_verifications').update({ approval_email_sent_at: null }).eq('id', r.id);
+    if (error) throw error;
+    const out = await sendApprovalEmail(r.id);
+    if (!out.sent) throw new Error(out.error || out.reason || 'The email could not be sent');
+  }, 'Approval email sent');
 
   const accountName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : '';
   const nameMismatch = accountName && accountName.toLowerCase() !== `${r.first_name} ${r.last_name}`.toLowerCase();
@@ -112,6 +132,7 @@ function ReviewModal({ row: r, user, onClose, onDone }) {
           <button className="ad-btn ad-btn-ok" onClick={() => window.confirm(`Approve ${r.first_name} ${r.last_name}'s identity?`) && review(true)} disabled={!!busy}><Check />Approve</button>
         </>
       ) : <>
+        {r.status === 'approved' && !rejecting && <button className="ad-btn ad-btn-ghost" disabled={!!busy} onClick={resend}><Mail />{busy === 'mail' ? 'Sending…' : 'Resend approval email'}</button>}
         {r.status === 'approved' && <button className="ad-btn ad-btn-no" disabled={!!busy} onClick={() => setRejecting(true)}><X />Revoke…</button>}
         {rejecting && <button className="ad-btn ad-btn-no" disabled={!reason.trim() || !!busy} onClick={() => review(false)}>Confirm</button>}
         <button className="ad-btn ad-btn-accent" onClick={onClose}>Close</button>
@@ -120,6 +141,7 @@ function ReviewModal({ row: r, user, onClose, onDone }) {
       <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
         <Pill status={r.status} />
         {r.reviewed_at && <span style={{ fontSize:13, color:'var(--muted)' }}>Reviewed {fmtDateTime(r.reviewed_at)}</span>}
+        {r.status === 'approved' && <span style={{ fontSize:13, color:'var(--muted)' }}>{r.approval_email_sent_at ? `· Email sent ${fmtDateTime(r.approval_email_sent_at)}` : '· Email not sent yet'}</span>}
         {r.status === 'rejected' && r.rejection_reason && <span style={{ fontSize:13, color:'var(--red)' }}>Reason: {r.rejection_reason}</span>}
       </div>
 
@@ -136,7 +158,7 @@ function ReviewModal({ row: r, user, onClose, onDone }) {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:12 }}>
         <DocImage path={r.doc_front_path} label={r.doc_back_path ? 'Front' : 'Photo page'} />
         <DocImage path={r.doc_back_path} label="Back" />
-        <DocImage path={r.selfie_path} label="Selfie with document" />
+        {r.selfie_path && <DocImage path={r.selfie_path} label="Selfie (older submission)" />}
       </div>
 
       {rejecting && (

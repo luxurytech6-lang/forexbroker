@@ -54,7 +54,7 @@ export default function IdentityBanner() {
     none: {
       cls: '', Icon: ShieldCheck,
       title: 'Verify your identity',
-      text: 'Confirm who you are to unlock withdrawals and every feature. It takes about 3 minutes — you’ll need an ID and a selfie.',
+      text: 'Confirm who you are to unlock withdrawals and every feature. It takes about 2 minutes — you’ll need a photo of your ID.',
       cta: 'Verify now',
     },
     pending: {

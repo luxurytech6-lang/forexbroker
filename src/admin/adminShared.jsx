@@ -795,6 +795,7 @@ export const PURCHASE_TYPES = {
   mining_purchase:     { section: 'mining',       label: 'Mining' },
   card_order:          { section: 'cards',        label: 'Cards' },
   copy_trading:        { section: 'copy-trading', label: 'Copy trading' },
+  staking_purchase:    { section: 'staking',      label: 'Staking' },
 };
 
 /** How a purchase was paid: crypto details + proof screenshot, or "Wallet" when there's no proof */

@@ -3,7 +3,7 @@ import supabase from "../supabase";
 import IdentityBanner from "../account/IdentityBanner";
 import {
   LayoutDashboard, Copy, Users, TrendingUp, Bot, CandlestickChart,
-  CreditCard, UserCircle, ShieldCheck, Settings, Headset, Building2, Pickaxe, Wallet as Wallet2, WalletCards,
+  CreditCard, UserCircle, ShieldCheck, Settings, Headset, Building2, Pickaxe, Layers, Repeat, Wallet as Wallet2, WalletCards,
   Search, Bell, LogOut, Download, Plus, ChevronRight, ArrowUpRight,
   Rocket, Crown, Zap, Leaf, CircleCheck, LineChart,
 } from "lucide-react";
@@ -545,6 +545,8 @@ const NAV_GROUPS = [
     { href:'/hire-trader',  Icon:Users,            label:'Hire a Trader' },
     { href:'/real-estate',  Icon:Building2,        label:'Real Estate', badge:'NEW' },
     { href:'/mining',       Icon:Pickaxe,          label:'Mining',      badge:'NEW' },
+    { href:'/staking',      Icon:Layers,           label:'Staking',     badge:'NEW' },
+    { href:'/swap',         Icon:Repeat,           label:'Swap',        badge:'NEW' },
     { href:'/terminal',     Icon:CandlestickChart, label:'Terminal' },
   ]},
   { title:'Discover', links:[
@@ -610,9 +612,32 @@ const signed = (sym, n, d = 2) => `${Number(n) >= 0 ? '+' : '−'}${sym}${Math.a
 
 const fmtPrice = (v) => { const n = Number(v ?? 0); return n.toLocaleString('en-US', { minimumFractionDigits: n >= 100 ? 2 : 4, maximumFractionDigits: n >= 100 ? 2 : 4 }); };
 
-function greeting() {
-  const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+/* Greeting by time of day: 05:00–11:59 morning, 12:00–16:59 afternoon, 17:00–04:59 evening.
+   Uses the time zone saved on the user's profile when there is one, otherwise the device's. */
+function hourIn(timeZone, now = new Date()) {
+  if (timeZone) {
+    try {
+      const h = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(now);
+      const n = parseInt(h, 10);
+      if (!Number.isNaN(n)) return n;
+    } catch (_) { /* unknown time zone → fall back to the device */ }
+  }
+  return now.getHours();
+}
+function greeting(timeZone, now = new Date()) {
+  const h = hourIn(timeZone, now);
+  return h >= 5 && h < 12 ? 'Good morning' : h >= 12 && h < 17 ? 'Good afternoon' : 'Good evening';
+}
+/* Re-renders every minute so the greeting and date change while the page stays open */
+function useMinuteTick() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000);
+    const onVis = () => { if (!document.hidden) setNow(new Date()); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
+  return now;
 }
 function nyseStatus() {
   try {
@@ -1107,6 +1132,7 @@ function QuickActions() {
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const now = useMinuteTick();   // keeps the greeting and date current
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user,        setUser]        = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -1138,7 +1164,7 @@ export default function Dashboard() {
         { data: userSettings },
         { data: activeSub },
       ] = await Promise.all([
-        supabase.from('users').select('first_name,last_name,email,plan,is_verified,currency').eq('id', uid).single(),
+        supabase.from('users').select('first_name,last_name,email,plan,is_verified,currency,timezone').eq('id', uid).single(),
         supabase.from('performance_bars').select('period_label,height_pct,is_negative').eq('user_id', uid).order('period_start', { ascending:true }).limit(12),
         supabase.from('open_positions').select('symbol,trade_type,open_price,current_price,profit_loss,status,opened_at,closed_at').eq('user_id', uid).order('opened_at', { ascending:false }),
         supabase.from('stock_orders').select('symbol,side,order_type,quantity,limit_price,filled_price,status,created_at').eq('user_id', uid).eq('status','filled').order('created_at', { ascending:true }),
@@ -1299,7 +1325,7 @@ export default function Dashboard() {
   const allocated  = copyRels.reduce((s, r) => s + Number(r.allocated_amount ?? 0), 0);
   const marketOpen = nyseStatus();
   const firstName  = user?.first_name || user?.email?.split('@')[0] || 'there';
-  const today      = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
+  const today      = now.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', ...(user?.timezone ? { timeZone: user.timezone } : {}) });
 
   if (!authChecked) {
     return (
@@ -1328,7 +1354,7 @@ export default function Dashboard() {
           <main className="main db-main">
             <div className="page-header">
               <div>
-                <h1 className="page-greeting">{greeting()}, {firstName}</h1>
+                <h1 className="page-greeting">{greeting(user?.timezone, now)}, {firstName}</h1>
                 <div className="page-sub">
                   <span>{today}</span>
                   <span className="mkt-pill"><span className={`live-dot${marketOpen ? '' : ' off'}`} />New York {marketOpen ? 'open' : 'closed'}</span>

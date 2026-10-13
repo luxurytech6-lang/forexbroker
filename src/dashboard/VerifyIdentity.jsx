@@ -2,7 +2,7 @@
  * VerifyIdentity.jsx — Route: /verify-identity
  * ─────────────────────────────────────────────────────────────────────────────
  * Identity verification (KYC). The user enters their details, uploads a
- * government ID and a selfie; an admin reviews it (Admin → Identity).
+ * government ID; an admin reviews it (Admin → Identity).
  *
  *   identity_verifications   one row per submission (pending → approved / rejected)
  *   storage "identity-documents"  private bucket, files under <user id>/
@@ -12,12 +12,12 @@
  */
 import React, { useState, useEffect, useRef } from "react";
 import {
-  ShieldCheck, BadgeCheck, Clock, AlertCircle, Upload, Camera, FileText, BookOpen, CreditCard, Car,
+  ShieldCheck, BadgeCheck, Clock, AlertCircle, Upload, FileText, BookOpen, CreditCard, Car,
   Check, ChevronLeft, ChevronRight, Loader2, Lock, RefreshCcw,
 } from "lucide-react";
 import {
   LayoutDashboard as DkDashboard, LineChart as DkLine, Copy as DkCopy, Users as DkUsers,
-  Building2 as DkBuilding, Pickaxe as DkPickaxe, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
+  Building2 as DkBuilding, Pickaxe as DkPickaxe, Layers as DkLayers, Repeat as DkRepeat, CandlestickChart as DkCandle, Bot as DkBot, TrendingUp as DkTrend,
   CreditCard as DkCard, UserCircle as DkUser, ShieldCheck as DkShield, Settings as DkSettings, Headset as DkHeadset,
   LogOut as DkLogout, Bell as DkBell, RefreshCw as DkRefresh, WalletCards as DkCards,
 } from "lucide-react";
@@ -229,6 +229,8 @@ const DK_NAV = [
     { key:'hire',      href:'/hire-trader',  Icon:DkUsers,     label:'Hire a Trader' },
     { key:'realestate',href:'/real-estate',  Icon:DkBuilding,  label:'Real Estate', badge:'NEW' },
     { key:'mining',    href:'/mining',       Icon:DkPickaxe,   label:'Mining',      badge:'NEW' },
+    { key:'staking',   href:'/staking',      Icon:DkLayers,    label:'Staking',     badge:'NEW' },
+    { key:'swap',      href:'/swap',         Icon:DkRepeat,    label:'Swap',        badge:'NEW' },
     { key:'terminal',  href:'/terminal',     Icon:DkCandle,    label:'Terminal' },
   ]},
   { title:'Discover', links:[
@@ -630,7 +632,7 @@ const DOC_TYPES = [
 const DOC_LABEL = Object.fromEntries(DOC_TYPES.map(d => [d.key, d.label]));
 const MAX_MB = 10;
 const IMG_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
-const STEPS = ['Your details', 'Document', 'Selfie', 'Review'];
+const STEPS = ['Your details', 'Document', 'Review'];
 
 const todayMinus = (years) => { const d = new Date(); d.setFullYear(d.getFullYear() - years); return d.toISOString().slice(0, 10); };
 const fmtDay = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '—';
@@ -721,7 +723,7 @@ export default function VerifyIdentity() {
             <div className="id-wrap">
               <div className="id-head">
                 <h1 className="re-page-title">Verify your identity</h1>
-                <p className="re-page-sub">We're required to confirm who our customers are. It takes about 3 minutes: your details, a photo of an official ID, and a selfie.</p>
+                <p className="re-page-sub">We're required to confirm who our customers are. It takes about 2 minutes: your details and a photo of an official ID.</p>
               </div>
 
               {identity === null ? <div className="id-skel" /> : (
@@ -816,7 +818,6 @@ function IdentityForm({ user, userId, previous, onDone }) {
   }));
   const [front, setFront] = useState(null);
   const [back, setBack]   = useState(null);
-  const [selfie, setSelfie] = useState(null);
   const [consent, setConsent] = useState(false);
   const [err, setErr] = useState('');
   const [touched, setTouched] = useState(false);
@@ -852,8 +853,6 @@ function IdentityForm({ user, userId, previous, onDone }) {
       return '';
     },
     // step 2
-    () => (!selfie ? 'Upload a selfie holding your document.' : ''),
-    // step 3
     () => (!consent ? 'Please confirm the information is correct.' : ''),
   ];
 
@@ -872,10 +871,9 @@ function IdentityForm({ user, userId, previous, onDone }) {
       return path;
     };
     try {
-      const [frontPath, backPath, selfiePath] = await Promise.all([
+      const [frontPath, backPath] = await Promise.all([
         up(front, 'document-front'),
         docType.back && back ? up(back, 'document-back') : Promise.resolve(null),
-        up(selfie, 'selfie'),
       ]);
       const { error } = await supabase.from('identity_verifications').insert({
         user_id: userId, status: 'pending',
@@ -885,7 +883,7 @@ function IdentityForm({ user, userId, previous, onDone }) {
         state_region: f.state_region.trim() || null, postal_code: f.postal_code.trim() || null,
         document_type: f.document_type, document_number: f.document_number.trim(),
         document_expiry: f.document_expiry || null,
-        doc_front_path: frontPath, doc_back_path: backPath, selfie_path: selfiePath,
+        doc_front_path: frontPath, doc_back_path: backPath,
       });
       if (error) throw new Error(error.message);
       onDone();
@@ -959,22 +957,6 @@ function IdentityForm({ user, userId, previous, onDone }) {
 
         {step === 2 && (
           <>
-            <h3>Take a selfie</h3>
-            <p>Hold your {docType.label.toLowerCase()} next to your face so we can match it to you.</p>
-            <div className="id-uploads">
-              <FileDrop label="Selfie with your document" hint="JPG or PNG · on a phone this opens the camera" file={selfie} onPick={pick(setSelfie, false)} capture="user" Icon={Camera} />
-              <div className="id-tips" style={{ alignSelf:'start' }}>
-                <div><Check />Face the camera in good light</div>
-                <div><Check />Your whole face and the document are in the photo</div>
-                <div><Check />No sunglasses, hat or mask</div>
-                <div><Check />The document's photo and name are readable</div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {step === 3 && (
-          <>
             <h3>Check and submit</h3>
             <p>Make sure everything matches your document.</p>
             <div className="id-review">
@@ -986,7 +968,7 @@ function IdentityForm({ user, userId, previous, onDone }) {
               {f.document_expiry && <div><span>Expires</span><strong>{fmtDay(f.document_expiry)}</strong></div>}
             </div>
             <div className="id-thumbs">
-              {[[front, docType.back ? 'Front' : 'Photo page'], [back, 'Back'], [selfie, 'Selfie']].filter(([x]) => x).map(([file, cap]) => (
+              {[[front, docType.back ? 'Front' : 'Photo page'], [back, 'Back']].filter(([x]) => x).map(([file, cap]) => (
                 <figure key={cap}><Thumb file={file} alt={cap} /><figcaption>{cap}</figcaption></figure>
               ))}
             </div>

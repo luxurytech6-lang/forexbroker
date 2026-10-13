@@ -2052,6 +2052,8 @@ const NAV_GROUPS = [
     { href:'/hire-trader',  icon:'ti-users',            label:'Hire a Trader' },
     { href:'/real-estate',  icon:'ti-building',         label:'Real Estate', badge:'NEW' },
     { href:'/mining',       icon:'ti-pick',             label:'Mining',      badge:'NEW' },
+    { href:'/staking',      icon:'ti-stack-2',          label:'Staking',     badge:'NEW' },
+    { href:'/swap',         icon:'ti-arrows-exchange',  label:'Swap',        badge:'NEW' },
     { href:'/terminal',     icon:'ti-chart-candle',     label:'Terminal', active:true },
   ]},
   { title:'Discover', links:[

@@ -1,12 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Check, X, ArrowRight } from 'lucide-react';
+import { Check, X, ArrowRight, Camera as SelfieIcon } from 'lucide-react';
 import {
-  supabase, PageHead, DataTable, Tabs, Pill, UserCell, ProofButton, useRows, useUsers, useAction,
+  supabase, PageHead, DataTable, Tabs, Pill, UserCell, ProofButton, Modal, useRows, useUsers, useAction,
   walletAdjust, notify, audit, usd, fmtDateTime, WITHDRAWALS_DEBIT_ON_REQUEST, PURCHASE_TYPES,
 } from '../adminShared';
+import { DocImage } from './Identity';
 
 const isDeposit    = (t) => /deposit/i.test(t.type || '');
 const isWithdrawal = (t) => /withdraw/i.test(t.type || '');
+// Any spelling of "waiting for review" counts as pending ('Pending', 'processing', 'awaiting' …)
+const isPending = (t) => /^(pending|processing|awaiting.*|under_review|in_review|submitted|review|in_progress|requested)$/i.test(String(t.status || '').trim());
 
 /**
  * Approve / reject a pending transaction.
@@ -32,13 +35,43 @@ async function review(tx, approve) {
   audit(approve ? 'approve' : 'reject', 'transactions', tx.id, { status: tx.status }, { status: approve ? 'completed' : 'rejected' });
 }
 
+/* Withdrawal selfie next to the user's ID photo, so the admin can compare them */
+function SelfieCheck({ tx, user }) {
+  const [open, setOpen] = useState(false);
+  const [idDoc, setIdDoc] = useState(undefined);   // undefined = loading, null = none
+  const show = async (e) => {
+    e.stopPropagation(); setOpen(true);
+    const { data } = await supabase.from('identity_verifications').select('doc_front_path,status,first_name,last_name,document_type')
+      .eq('user_id', tx.user_id).order('created_at', { ascending: false }).limit(5);
+    setIdDoc((data || []).find(r => r.status === 'approved') || (data || [])[0] || null);
+  };
+  if (!tx.selfie_path) return <span style={{ color:'var(--faint)', fontSize:13 }} title="No selfie on this withdrawal">—</span>;
+  return (
+    <>
+      <button className="ad-btn ad-btn-ghost ad-btn-sm" onClick={show}><SelfieIcon />Selfie</button>
+      {open && (
+        <Modal wide title="Withdrawal selfie" sub={`${user?.email || tx.user_id} · ${usd(Math.abs(tx.amount))} · ${fmtDateTime(tx.created_at)}`} onClose={() => setOpen(false)}
+          footer={<button className="ad-btn ad-btn-accent" onClick={() => setOpen(false)}>Close</button>}>
+          <div style={{ fontSize:14, color:'var(--muted)' }}>Check that the person in the live selfie matches their ID before approving this withdrawal.</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12 }}>
+            <DocImage path={tx.selfie_path} label="Live selfie (taken at withdrawal)" />
+            {idDoc === undefined ? <div style={{ color:'var(--muted)' }}>Loading ID…</div>
+              : idDoc ? <DocImage path={idDoc.doc_front_path} label={`ID on file · ${idDoc.first_name} ${idDoc.last_name} (${idDoc.status})`} />
+              : <div className="ad-card" style={{ padding:16, color:'var(--muted)', fontSize:14 }}>This user hasn't submitted an ID yet, so there's nothing to compare against.</div>}
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export default function Transactions({ refreshCounts, go }) {
   const users = useUsers();
   const { rows, loading, error, missing, reload } = useRows('transactions', { limit: 3000 });
   const [tab, setTab] = useState('deposits');
   const [busy, run] = useAction();
 
-  const pending = rows.filter(t => t.status === 'pending');
+  const pending = rows.filter(isPending);
   const groups = useMemo(() => ({
     deposits:    pending.filter(isDeposit),
     withdrawals: pending.filter(isWithdrawal),
@@ -73,12 +106,13 @@ export default function Transactions({ refreshCounts, go }) {
     ) },
     { key:'reference', label:'Reference', render:r => { const ref = r.reference || r.invoice_number || ''; return ref ? <span className="ad-mono" title={ref}>{ref.length > 18 ? `${ref.slice(0, 16)}…` : ref}</span> : '—'; } },
     { key:'proof', label:'Proof', render:r => <ProofButton path={r.proof_url} /> },
-    { key:'act', label:'Status', align:'right', render:r => r.status === 'pending' && PURCHASE_TYPES[r.type] ? (
+    { key:'selfie', label:'Selfie', render:r => isWithdrawal(r) ? <SelfieCheck tx={r} user={users[r.user_id]} /> : null },
+    { key:'act', label:'Status', align:'right', render:r => isPending(r) && PURCHASE_TYPES[r.type] ? (
       // Paid purchases are approved where the purchase lives, which also settles this payment
       <button className="ad-btn ad-btn-ghost ad-btn-sm" title="Approving it there switches the purchase on and completes this payment" onClick={() => go?.(PURCHASE_TYPES[r.type].section)}>
         Review in {PURCHASE_TYPES[r.type].label}<ArrowRight />
       </button>
-    ) : r.status === 'pending' ? (
+    ) : isPending(r) ? (
       <div className="ad-row-actions">
         <button className="ad-btn ad-btn-ok ad-btn-sm" disabled={busy === r.id} onClick={() => act(r, true)}><Check />Approve</button>
         <button className="ad-btn ad-btn-no ad-btn-sm" disabled={busy === r.id} onClick={() => act(r, false)}><X />Reject</button>
